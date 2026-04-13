@@ -33,6 +33,7 @@ class TestEndToEnd:
         Note: This test will make real API calls to Azure and may incur costs.
         """
         from helper import (
+            get_audio_channel,
             load_audio_segments,
             transcribe_audio_segments,
             clean_up_temp_files
@@ -40,9 +41,12 @@ class TestEndToEnd:
         
         api_key = os.environ.get('AZURE_SPEECH_KEY')
         api_location = os.environ.get('AZURE_AI_LOCATION')
+        assert api_key is not None and api_location is not None
         
-        # Load audio segments
-        audio_files = load_audio_segments(str(tmp_wav_file))
+        # Load audio segments from the WAV file
+        audio = get_audio_channel(str(tmp_wav_file))
+        assert audio is not None
+        audio_files = load_audio_segments(audio)
         
         try:
             # Transcribe (may return empty for silence, but shouldn't raise)

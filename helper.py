@@ -5,7 +5,7 @@ import math
 import re
 import tempfile
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Constants
 MINUTE_TO_MILLI = 60 * 1000  # Conversion factor: minutes to milliseconds
@@ -96,7 +96,7 @@ def load_audio_segments(audio_file: AudioSegment) -> List[str]:
         for i in range(num_segments):
             start_time = i * SEGMENT_LENGTH
             end_time = min((i + 1) * SEGMENT_LENGTH, audio_length)  # Ensure last segment doesn't exceed total length
-            segment = audio_file[start_time:end_time]
+            segment: AudioSegment = audio_file[start_time:end_time]  # type: ignore[assignment]
             tmp_file = os.path.join(tmp_dir, f"{TMP_FILE_NAME}_part{i + 1}.wav")
             segment.export(tmp_file, format="wav")
             audio_segments.append(tmp_file)
@@ -226,7 +226,7 @@ def download_youtube_audio(url: str) -> str:
 
     tmp_dir = tempfile.mkdtemp()
     output_template = os.path.join(tmp_dir, "%(title)s.%(ext)s")
-    ydl_opts = {
+    ydl_opts: Dict[str, Any] = {
         "format": "bestaudio/best",
         "outtmpl": output_template,
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
@@ -234,7 +234,7 @@ def download_youtube_audio(url: str) -> str:
     }
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
             info = ydl.extract_info(url, download=True)
             title = info.get("title", "audio")
 

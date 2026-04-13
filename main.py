@@ -70,6 +70,7 @@ def main():
         if args.backend == "whisper":
             transcribed_text = helper.transcribe_with_whisper(audio_files, model_size=args.model)
         else:
+            assert azure_speech_key is not None and azure_ai_location is not None
             transcribed_text = helper.transcribe_audio_segments(
                 audio_files, api_key=azure_speech_key, api_location=azure_ai_location
             )
