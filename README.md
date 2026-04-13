@@ -46,10 +46,15 @@ A flexible transcription tool that extracts audio from local video/audio files o
 
 2. Install dependencies using `uv`:
    ```bash
-   uv sync --extra dev
+   uv sync
    ```
 
    This installs all core dependencies and dev tools (pytest) into a `.venv` virtual environment.
+
+   To also install the optional Whisper backend:
+   ```bash
+   uv sync --extra whisper
+   ```
 
 ## Configuration
 
