@@ -46,10 +46,10 @@ A flexible transcription tool that extracts audio from local video/audio files o
 
 2. Install dependencies using `uv`:
    ```bash
-   uv sync
+   uv sync --extra dev
    ```
 
-   This installs all core dependencies into a `.venv` virtual environment.
+   This installs all core dependencies and dev tools (pytest) into a `.venv` virtual environment.
 
 ## Configuration
 
@@ -120,10 +120,10 @@ The Whisper backend provides local, offline transcription with no API credential
 
 ### Installation
 
-Whisper is not included in the default `requirements.txt` because it has a large PyTorch dependency (~500MB). Install it separately when needed:
+Whisper is not included in the default install because it has a large PyTorch dependency (~500MB). Install it as an optional extra when needed:
 
 ```bash
-pip install faster-whisper
+uv sync --extra whisper
 ```
 
 ### Model Sizes
@@ -149,8 +149,8 @@ uv run python main.py video.mp4 --backend whisper --model large
 media-transcriber/
 ├── main.py              # CLI entry point; argument parsing and orchestration
 ├── helper.py            # Audio processing, YouTube download, transcription backends
-├── requirements.txt     # Core dependencies (pydub, yt-dlp, etc.)
-├── pytest.ini           # Pytest configuration
+├── pyproject.toml       # Project metadata and dependencies (uv)
+├── uv.lock              # Locked dependency versions
 ├── README.md            # Project documentation
 ├── LICENSE              # MIT License
 └── tests/
