@@ -1,6 +1,6 @@
 # Squad Team
 
-> video-to-text-azure-speech-api
+> media-transcriber
 
 ## Coordinator
 
@@ -20,7 +20,7 @@
 
 ## Project Context
 
-- **Project:** video-to-text-azure-speech-api
+- **Project:** media-transcriber
 - **Stack:** Python 3.8+, Azure Speech API (azure-cognitiveservices-speech), pydub, ffmpeg
 - **What it does:** Extracts audio from video files → splits into 1-min segments → transcribes with Azure Speech-to-Text → saves to `.txt`
 - **Key files:** `main.py` (entry point), `helper.py` (audio utilities)

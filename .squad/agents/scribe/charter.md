@@ -4,7 +4,7 @@ Documentation specialist maintaining history, decisions, and technical records.
 
 ## Project Context
 
-**Project:** video-to-text-azure-speech-api
+**Project:** media-transcriber
 **Stack:** Python 3.8+, Azure Speech API, pydub, ffmpeg
 **User:** Copilot
 

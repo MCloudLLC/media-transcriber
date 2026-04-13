@@ -40,8 +40,8 @@ A flexible transcription tool that extracts audio from local video/audio files o
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/MCloudLLC/video-to-text-azure-speech-api.git
-   cd video-to-text-azure-speech-api
+   git clone https://github.com/MCloudLLC/media-transcriber.git
+   cd media-transcriber
    ```
 
 2. Install dependencies using `uv`:
@@ -146,7 +146,7 @@ uv run python main.py video.mp4 --backend whisper --model large
 ## Project Structure
 
 ```
-video-to-text-azure-speech-api/
+media-transcriber/
 ├── main.py              # CLI entry point; argument parsing and orchestration
 ├── helper.py            # Audio processing, YouTube download, transcription backends
 ├── requirements.txt     # Core dependencies (pydub, yt-dlp, etc.)
