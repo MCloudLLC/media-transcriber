@@ -13,12 +13,16 @@ This project extracts audio from a video file, transcribes it into English text 
 ## Prerequisites
 - Python 3.8 or higher.
 - Azure Speech API key and location.
+- `ffmpeg` — required for audio extraction:
+  - **macOS:** `brew install ffmpeg`
+  - **Ubuntu/Debian:** `sudo apt-get install ffmpeg`
+  - **Windows:** Download from https://ffmpeg.org/download.html and add to PATH
 
 ## Installation
 1. Clone this repository:
    ```bash
    git clone https://github.com/MCloudLLC/video-to-text-azure-speech-api.git
-   cd video_to_text
+   cd video-to-text-azure-speech-api
    ```
 
 2. Install the required dependencies:
@@ -26,12 +30,25 @@ This project extracts audio from a video file, transcribes it into English text 
    pip install -r requirements.txt
    ```
 
-3. Set up your Azure Speech API key and location:
-   - Open `main.py` and replace the placeholders for `AZURE_SPEECH_KEY` and `AZURE_AI_LOCATION` with your Azure credentials:
-     ```python
-     AZURE_SPEECH_KEY = "<your_azure_speech_api_key>"
-     AZURE_AI_LOCATION = "<your_azure_ai_location>"
-     ```
+3. Set up your Azure Speech API credentials as environment variables:
+   
+   **Linux/macOS:**
+   ```bash
+   export AZURE_SPEECH_KEY="your_azure_speech_api_key"
+   export AZURE_AI_LOCATION="your_azure_ai_location"
+   ```
+   
+   **Windows (Command Prompt):**
+   ```cmd
+   set AZURE_SPEECH_KEY=your_azure_speech_api_key
+   set AZURE_AI_LOCATION=your_azure_ai_location
+   ```
+   
+   **Windows (PowerShell):**
+   ```powershell
+   $env:AZURE_SPEECH_KEY="your_azure_speech_api_key"
+   $env:AZURE_AI_LOCATION="your_azure_ai_location"
+   ```
 
 ## Usage
 1. Run the script with a video file as input:
@@ -47,13 +64,14 @@ This project extracts audio from a video file, transcribes it into English text 
 
 ## Project Structure
 ```
-video_to_text/
+video-to-text-azure-speech-api/
 ├── helper.py          # Contains utility functions for audio processing and transcription.
 ├── main.py            # Main script to run the transcription process.
 ├── requirements.txt   # Lists the required Python packages.
 ├── README.md          # Project documentation.
 ├── LICENSE            # License information.
-└── .gitignore         # Files and directories to ignore in version control.
+├── .gitignore         # Files and directories to ignore in version control.
+└── tests/             # Test suite (pytest).
 ```
 
 ## Example
@@ -64,8 +82,8 @@ python main.py example.mp4
 The transcription will be saved to `example_transcription.txt` in the same directory.
 
 ## Notes
-- Ensure the input file is in a supported format (e.g., MP4). Other formats may require adjustments.
-- The Azure Speech API key and location must be set by the user in `main.py`. For better security, consider using environment variables or a configuration file.
+- Supported formats: MP4, AVI, MKV, MOV, MP3, WAV, FLAC, OGG (and others supported by ffmpeg).
+- Azure credentials are read from the `AZURE_SPEECH_KEY` and `AZURE_AI_LOCATION` environment variables. The application will exit immediately on startup if either variable is missing.
 - Temporary audio files created during processing will be automatically deleted after transcription.
 
 ## License

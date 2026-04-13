@@ -35,3 +35,62 @@ Complete code review of `main.py` and `helper.py` conducted with Dallas (archite
 - **Temp WAV files** written to CWD rather than a proper temp directory (`tempfile.mkdtemp`).
 
 **Status:** All findings merged into `.squad/decisions.md`; inbox cleared.
+
+### 2026-04-13 — All 10 Code Fixes Implemented
+
+Completed implementation of all critical, high, and medium severity fixes identified in team code review.
+
+**Key Implementation Decisions:**
+
+1. **`recognize_azure` Return Value Discovery**
+   - Investigated SpeechRecognition library behavior
+   - **Finding:** Default `recognize_azure(show_all=False)` returns single `str`, NOT tuple `(text, confidence)`
+   - **Fix:** Changed from tuple unpacking to single value assignment: `text = recognizer.recognize_azure(...)`
+   - Previous code would have raised `TypeError` on every transcription attempt
+   - Confirmed `location` parameter IS supported in the API signature
+
+2. **Tempfile Strategy**
+   - Chose `tempfile.mkdtemp()` over UUID/timestamp-prefixed files in CWD
+   - **Rationale:** Prevents concurrent run collisions, follows OS conventions, enables clean directory removal
+   - Implementation: `tmp_dir = tempfile.mkdtemp()` → write WAV files to `os.path.join(tmp_dir, filename)`
+   - Cleanup: `clean_up_temp_files()` removes files then attempts `os.rmdir(temp_dir)` (gracefully handles non-empty dirs)
+
+3. **Exception Handling Philosophy**
+   - **Total failure:** Raise `RuntimeError` with diagnostic message (e.g., "all N segments failed")
+   - **Partial failure:** Log `warning` with count but return partial results
+   - **Write failures:** Always propagate exceptions (never swallow)
+   - **Cleanup:** Always runs in `finally` block regardless of outcome
+
+4. **Logging Configuration**
+   - **Entry point (main.py):** Calls `logging.basicConfig()` once at module level
+   - **Library code (helper.py):** Only imports and uses `logging`; does NOT configure
+   - Pattern ensures single configuration point, prevents conflicts
+
+5. **Cross-Platform File Opening**
+   - Used `sys.platform` detection over `webbrowser.open()`
+   - **Rationale:** More control; webbrowser may launch browser instead of native text editor
+   - Windows: `os.startfile()`, macOS: `subprocess.run(["open", ...])`, Linux: `subprocess.run(["xdg-open", ...])`
+
+6. **Type Hints**
+   - Added full type annotations to all 7 functions in helper.py
+   - Used `Optional[AudioSegment]` for `get_audio_channel()` return (can be None on error)
+   - Preserved function signatures exactly to avoid breaking Hudson's tests
+
+**Files Modified:**
+- `main.py`: Env var loading, logging, finally block, cross-platform opener
+- `helper.py`: `MINUTE_TO_MILLI` rename, tempfile usage, exception propagation, logging, type hints, `recognize_azure` fix
+
+**Verification:**
+- ✅ No `SECOND_TO_MILLI` references in code
+- ✅ All `print()` replaced with `logging`
+- ✅ All functions type-hinted
+- ✅ No `logging.basicConfig()` in helper.py
+- ✅ Credentials loaded from env vars with startup validation
+- ✅ Cleanup in `finally` block
+- ✅ Exceptions propagated correctly
+
+**Documentation:**
+- Created `.squad/decisions/inbox/ripley-code-fixes.md` with complete implementation summary
+- Includes API discoveries, design rationale, testing notes for Hudson
+
+**Status:** Implementation complete; ready for Dallas review and Hudson test coverage.

@@ -21,3 +21,24 @@
 - Consensus: Prioritize credentials (use env vars), cleanup in finally block, cross-platform file opening, and test infrastructure setup
 - All findings deduplicated and merged into `.squad/decisions.md`
 - Orchestration logs created: `.squad/orchestration-log/2026-04-13T18-23-25Z-dallas.md` et al.
+
+### 2026-04-13: Documentation and dependency fixes applied
+
+**README.md fixes (6 total):**
+1. Fixed `cd video_to_text` → `cd video-to-text-azure-speech-api` (matches actual repo name)
+2. **Removed unsafe hardcoding instructions** for `main.py` credentials (FIX for Critical security issue)
+3. **Added environment variable setup** with platform-specific examples (Linux/macOS, Windows CMD, PowerShell)
+4. **Added `ffmpeg` as explicit prerequisite** with installation commands (brew, apt-get, download link)
+5. Updated project structure to show `video-to-text-azure-speech-api/` (correct repo name) and added `tests/` directory
+6. Expanded supported formats from "MP4" to "MP4, AVI, MKV, MOV, MP3, WAV, FLAC, OGG (and others)"
+7. Replaced outdated hardcoding warning with statement: "credentials read from environment variables; app exits if missing"
+
+**requirements.txt fixes (3 total):**
+1. Removed `standard-aifc==3.13.0` — unused, Python 3.8+ has built-in audiofile support
+2. Removed `standard-chunk==3.13.0` — unused, not imported anywhere
+3. Removed `typing_extensions==4.13.2` — unused, Python 3.8+ includes typing module natively
+4. Added test dependencies: `pytest==8.3.5`, `pytest-mock==3.14.0`, `pytest-cov==6.1.0`
+5. Kept `audioop-lts==0.2.1` — necessary for Python 3.13+ (SpeechRecognition dependency)
+
+**Rationale:** These changes implement critical security recommendation (env vars for credentials), clarify platform prerequisites (ffmpeg), and align documentation with actual repository structure and testing infrastructure (Hudson's test plan). Cleanup of unused dependencies improves clarity and reduces supply chain surface area.
+
