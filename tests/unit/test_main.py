@@ -11,13 +11,11 @@ class TestMain:
     """Tests for main.py execution flow."""
 
     def test_exits_if_no_args(self, monkeypatch):
-        """Should exit with code 1 when no arguments provided."""
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
-        monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
+        """Should exit when no arguments provided."""
         monkeypatch.setattr(sys, "argv", ["main.py"])
         with pytest.raises(SystemExit) as exc:
             main.main()
-        assert exc.value.code == 1
+        assert exc.value.code != 0
 
     def test_exits_if_file_not_found(self, monkeypatch):
         """Should exit with code 1 when file doesn't exist."""
@@ -158,7 +156,8 @@ class TestMain:
         mock_transcribe = MagicMock(return_value=["First text", "Second text"])
         mock_write = MagicMock()
         mock_cleanup = MagicMock()
-        with patch("helper.check_file_exists", mock_check), \
+        with patch("helper.is_youtube_url", return_value=False), \
+             patch("helper.check_file_exists", mock_check), \
              patch("helper.get_audio_channel", mock_get_audio), \
              patch("helper.load_audio_segments", mock_load), \
              patch("helper.transcribe_audio_segments", mock_transcribe), \
@@ -173,3 +172,57 @@ class TestMain:
         mock_transcribe.assert_called_with(["seg1.wav", "seg2.wav"], api_key="key", api_location="loc")
         mock_write.assert_called_with("test.mp4", ["First text", "Second text"])
         mock_cleanup.assert_called_with(["seg1.wav", "seg2.wav"])
+
+    def test_whisper_backend_skips_azure_creds(self, monkeypatch):
+        """Should not require Azure credentials when using whisper backend."""
+        monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
+        monkeypatch.delenv("AZURE_AI_LOCATION", raising=False)
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "whisper"])
+        monkeypatch.setattr(sys, "platform", "win32")
+        with patch("helper.is_youtube_url", return_value=False), \
+             patch("helper.check_file_exists", return_value=True), \
+             patch("helper.get_audio_channel", return_value=MagicMock()), \
+             patch("helper.load_audio_segments", return_value=["seg1.wav"]), \
+             patch("helper.transcribe_with_whisper", return_value=["transcribed"]), \
+             patch("helper.write_file"), \
+             patch("helper.get_transcription_file", return_value="output.txt"), \
+             patch("helper.clean_up_temp_files"), \
+             patch("main.os.startfile"):
+            main.main()  # Should not raise SystemExit
+
+    def test_whisper_backend_calls_transcribe_with_whisper(self, monkeypatch):
+        """Should call helper.transcribe_with_whisper with correct model when backend is whisper."""
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "whisper", "--model", "small"])
+        monkeypatch.setattr(sys, "platform", "win32")
+        mock_transcribe = MagicMock(return_value=["text"])
+        with patch("helper.is_youtube_url", return_value=False), \
+             patch("helper.check_file_exists", return_value=True), \
+             patch("helper.get_audio_channel", return_value=MagicMock()), \
+             patch("helper.load_audio_segments", return_value=["seg1.wav"]), \
+             patch("helper.transcribe_with_whisper", mock_transcribe), \
+             patch("helper.write_file"), \
+             patch("helper.get_transcription_file", return_value="output.txt"), \
+             patch("helper.clean_up_temp_files"), \
+             patch("main.os.startfile"):
+            main.main()
+        mock_transcribe.assert_called_once_with(["seg1.wav"], model_size="small")
+
+    def test_youtube_url_downloads_audio(self, monkeypatch):
+        """Should call download_youtube_audio when input is a YouTube URL."""
+        monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
+        monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
+        monkeypatch.setattr(sys, "argv", ["main.py", "https://youtube.com/watch?v=test"])
+        monkeypatch.setattr(sys, "platform", "win32")
+        mock_download = MagicMock(return_value="/tmp/yt/video.wav")
+        with patch("helper.is_youtube_url", return_value=True), \
+             patch("helper.download_youtube_audio", mock_download), \
+             patch("helper.get_audio_channel", return_value=MagicMock()), \
+             patch("helper.load_audio_segments", return_value=["seg1.wav"]), \
+             patch("helper.transcribe_audio_segments", return_value=["text"]), \
+             patch("helper.write_file"), \
+             patch("helper.get_transcription_file", return_value="output.txt"), \
+             patch("helper.clean_up_temp_files"), \
+             patch("main.os.startfile"), \
+             patch("main.os.path.exists", return_value=False):
+            main.main()
+        mock_download.assert_called_once_with("https://youtube.com/watch?v=test")

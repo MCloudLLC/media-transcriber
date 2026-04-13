@@ -2,6 +2,7 @@ import speech_recognition as sr
 from pydub import AudioSegment
 import os
 import math
+import re
 import tempfile
 import logging
 from typing import List, Optional, Tuple
@@ -182,3 +183,126 @@ def write_file(input_file: str, transcribed_text: List[str]) -> None:
     except Exception as e:
         logging.error(f"Error writing transcription file: {e}")
         raise
+
+
+_YOUTUBE_PATTERN = re.compile(
+    r"(https?://)?(www\.)?(youtube\.com/watch\?|youtu\.be/)[\w\-]+"
+)
+
+
+def is_youtube_url(input_source: str) -> bool:
+    """
+    Checks whether the given string is a YouTube URL.
+
+    Args:
+        input_source (str): The input string to check.
+
+    Returns:
+        bool: True if the string looks like a YouTube URL, False otherwise.
+    """
+    return bool(_YOUTUBE_PATTERN.match(input_source))
+
+
+def download_youtube_audio(url: str) -> str:
+    """
+    Downloads audio from a YouTube URL using yt-dlp and converts it to WAV.
+
+    Args:
+        url (str): YouTube video URL.
+
+    Returns:
+        str: Path to the downloaded WAV file.
+
+    Raises:
+        ImportError: If yt-dlp is not installed.
+        Exception: If the download or conversion fails.
+    """
+    try:
+        import yt_dlp
+    except ImportError:
+        raise ImportError(
+            "yt-dlp is required for YouTube support. Install it with: pip install yt-dlp"
+        )
+
+    tmp_dir = tempfile.mkdtemp()
+    output_template = os.path.join(tmp_dir, "%(title)s.%(ext)s")
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": output_template,
+        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
+        "quiet": True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            title = info.get("title", "audio")
+
+        # Find the downloaded WAV file (yt-dlp may sanitize the title)
+        downloaded_file = os.path.join(tmp_dir, f"{title}.wav")
+        if not os.path.exists(downloaded_file):
+            wav_files = [f for f in os.listdir(tmp_dir) if f.endswith(".wav")]
+            if not wav_files:
+                raise FileNotFoundError(f"Downloaded audio file not found in {tmp_dir}")
+            downloaded_file = os.path.join(tmp_dir, wav_files[0])
+
+        logging.info(f"Downloaded YouTube audio to: {downloaded_file}")
+        return downloaded_file
+
+    except Exception as e:
+        logging.error(f"Error downloading YouTube audio: {e}")
+        raise
+
+
+def transcribe_with_whisper(audio_files: List[str], model_size: str = "base") -> List[str]:
+    """
+    Transcribes audio segments using a local Whisper model via faster-whisper.
+
+    Args:
+        audio_files (list): List of audio file paths to transcribe.
+        model_size (str): Whisper model size: tiny, base, small, medium, large (default: base).
+
+    Returns:
+        list: List of transcribed text segments.
+
+    Raises:
+        ImportError: If faster-whisper is not installed.
+        RuntimeError: If all segments fail to transcribe.
+    """
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        raise ImportError(
+            "faster-whisper is required for the Whisper backend. "
+            "Install it with: pip install faster-whisper"
+        )
+
+    logging.info(f"Loading Whisper model: {model_size}")
+    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+
+    txt_array = []
+    failed_files = []
+    logging.info("Transcribing WAV file(s) with Whisper.")
+
+    for file in audio_files:
+        try:
+            logging.info(f"Transcribing file: {file}")
+            segments, _ = model.transcribe(file, beam_size=5)
+            text = " ".join(segment.text.strip() for segment in segments)
+            txt_array.append(text)
+        except Exception as e:
+            logging.error(f"Error transcribing file {file}: {e}")
+            failed_files.append(file)
+
+    if failed_files and len(failed_files) == len(audio_files):
+        raise RuntimeError(
+            f"Failed to transcribe all {len(audio_files)} audio segments."
+        )
+
+    if failed_files:
+        logging.warning(
+            f"Partial transcription: {len(failed_files)} of {len(audio_files)} segments failed."
+        )
+
+    logging.info("Transcription complete.")
+    return txt_array

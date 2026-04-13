@@ -1,6 +1,10 @@
 audioop-lts==0.2.1; python_version >= "3.13"
 pydub==0.25.1
 SpeechRecognition==3.14.2
+yt-dlp>=2024.1.0
+
+# Optional: Install for local Whisper transcription (--backend whisper)
+# faster-whisper>=1.0.0
 
 # Testing
 pytest==8.3.5
