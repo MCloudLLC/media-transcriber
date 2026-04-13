@@ -1,0 +1,42 @@
+[
+  {
+    "persistent_name": "Dallas",
+    "role": "Lead",
+    "universe": "alien",
+    "created_at": "2026-04-13T18:14:20.389Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Ripley",
+    "role": "Backend Dev",
+    "universe": "alien",
+    "created_at": "2026-04-13T18:14:20.389Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Hudson",
+    "role": "Tester",
+    "universe": "alien",
+    "created_at": "2026-04-13T18:14:20.389Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Scribe",
+    "role": "Session Logger",
+    "universe": "exempt",
+    "created_at": "2026-04-13T18:14:20.389Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Ralph",
+    "role": "Work Monitor",
+    "universe": "exempt",
+    "created_at": "2026-04-13T18:14:20.389Z",
+    "legacy_named": false,
+    "status": "active"
+  }
+]

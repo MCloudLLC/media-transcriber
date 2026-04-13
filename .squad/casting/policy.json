@@ -1,0 +1,6 @@
+{
+  "universeAllowlist": ["alien"],
+  "maxTeamSize": 10,
+  "overflowStrategy": "diegetic-expansion",
+  "castingRequired": true
+}

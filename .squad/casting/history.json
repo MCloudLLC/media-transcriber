@@ -1,0 +1,12 @@
+[
+  {
+    "assignment_id": "init-2026-04-13",
+    "universe": "alien",
+    "timestamp": "2026-04-13T18:14:20.389Z",
+    "agents": [
+      { "name": "Dallas", "role": "Lead" },
+      { "name": "Ripley", "role": "Backend Dev" },
+      { "name": "Hudson", "role": "Tester" }
+    ]
+  }
+]
