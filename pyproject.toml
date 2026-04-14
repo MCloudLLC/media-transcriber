@@ -34,7 +34,7 @@ media-transcriber-gui = "app:launch"
 
 [dependency-groups]
 dev = [
-    "pytest==8.3.5",
+    "pytest==9.0.3",
     "pytest-mock==3.14.0",
     "pytest-cov==6.1.0",
 ]
