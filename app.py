@@ -85,7 +85,7 @@ class App:
             values=["whisper", "openai-whisper", "azure"],
             command=self._on_backend_change,
         )
-        self._backend_seg.set("whisper")
+        self._backend_seg.set("openai-whisper")
         self._backend_seg.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
         row += 1
 
@@ -105,7 +105,7 @@ class App:
         self._device_label.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 2))
         row += 1
         self._device_seg = ctk.CTkSegmentedButton(left, values=["cpu", "cuda"])
-        self._device_seg.set("cpu")
+        self._device_seg.set("cuda")
         self._device_seg.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
         row += 1
 

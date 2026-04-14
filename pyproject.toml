@@ -20,6 +20,8 @@ whisper = [
 ]
 whisper-pytorch = [
     "openai-whisper>=20231117",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
 ]
 gui = [
     "customtkinter>=5.2.0",
@@ -30,7 +32,7 @@ qa = [
     "openai>=1.0.0",
 ]
 all = [
-    "media-transcriber[whisper,whisper-pytorch,gui,qa]",
+    "media-transcriber[whisper-pytorch,gui,qa]",
 ]
 
 [project.scripts]
@@ -62,3 +64,13 @@ markers = [
     "slow: marks tests as slow",
 ]
 addopts = "--tb=short"
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cuda" }
+torchvision = { index = "pytorch-cuda" }
+torchaudio = { index = "pytorch-cuda" }

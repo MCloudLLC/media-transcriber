@@ -20,11 +20,11 @@ def main():
     parser.add_argument(
         "--backend",
         choices=["azure", "whisper", "openai-whisper"],
-        default="azure",
+        default="openai-whisper",
         help=(
-            "Transcription backend: 'azure' (default, cloud), "
+            "Transcription backend: 'openai-whisper' (default, local, PyTorch, CUDA 13.x compatible), "
             "'whisper' (local, faster-whisper, CUDA 11/12), "
-            "or 'openai-whisper' (local, PyTorch, CUDA 13.x compatible)"
+            "or 'azure' (cloud, requires AZURE_SPEECH_KEY and AZURE_AI_LOCATION)"
         ),
     )
     parser.add_argument(
@@ -35,8 +35,8 @@ def main():
     parser.add_argument(
         "--device",
         choices=["cpu", "cuda"],
-        default="cpu",
-        help="Device for Whisper inference: 'cpu' (default) or 'cuda' (NVIDIA GPU)",
+        default="cuda",
+        help="Device for Whisper inference: 'cuda' (default) or 'cpu'",
     )
     parser.add_argument(
         "--output",

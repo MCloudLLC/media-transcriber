@@ -58,7 +58,7 @@ class TestMain:
         """Should call clean_up_temp_files on successful run."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4"])
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "azure"])
         monkeypatch.setattr(sys, "platform", "win32")
         mock_cleanup = MagicMock()
         with patch("helper.check_file_exists", return_value=True), \
@@ -94,7 +94,7 @@ class TestMain:
         """Should use os.startfile on Windows."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4"])
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "azure"])
         monkeypatch.setattr(sys, "platform", "win32")
         with patch("helper.check_file_exists", return_value=True), \
              patch("helper.get_audio_channel", return_value=MagicMock()), \
@@ -111,7 +111,7 @@ class TestMain:
         """Should use subprocess.run with 'open' on macOS."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4"])
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "azure"])
         monkeypatch.setattr(sys, "platform", "darwin")
         with patch("helper.check_file_exists", return_value=True), \
              patch("helper.get_audio_channel", return_value=MagicMock()), \
@@ -129,7 +129,7 @@ class TestMain:
         """Should use subprocess.run with 'xdg-open' on Linux."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4"])
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "azure"])
         monkeypatch.setattr(sys, "platform", "linux")
         with patch("helper.check_file_exists", return_value=True), \
              patch("helper.get_audio_channel", return_value=MagicMock()), \
@@ -147,7 +147,7 @@ class TestMain:
         """Should complete full happy-path flow successfully."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4"])
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "azure"])
         monkeypatch.setattr(sys, "platform", "win32")
         mock_audio = MagicMock()
         mock_check = MagicMock(return_value=True)
@@ -205,13 +205,13 @@ class TestMain:
              patch("helper.clean_up_temp_files"), \
              patch("main.os.startfile"):
             main.main()
-        mock_transcribe.assert_called_once_with(["seg1.wav"], model_size="small", device="cpu")
+        mock_transcribe.assert_called_once_with(["seg1.wav"], model_size="small", device="cuda")
 
     def test_youtube_url_downloads_audio(self, monkeypatch):
         """Should call download_youtube_audio when input is a YouTube URL."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
-        monkeypatch.setattr(sys, "argv", ["main.py", "https://youtube.com/watch?v=test"])
+        monkeypatch.setattr(sys, "argv", ["main.py", "https://youtube.com/watch?v=test", "--backend", "azure"])
         monkeypatch.setattr(sys, "platform", "win32")
         mock_download = MagicMock(return_value="/tmp/yt/video.wav")
         with patch("helper.is_youtube_url", return_value=True), \
