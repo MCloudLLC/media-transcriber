@@ -151,30 +151,61 @@ def transcribe_audio_segments(audio_files: List[str], api_key: str, api_location
     logging.info("Transcription complete.")
     return txt_array
 
-def get_transcription_file(input_file: str) -> str:
+def sanitize_filename(name: str) -> str:
+    """
+    Sanitizes a string for safe use as a filename on any filesystem.
+
+    Removes or replaces characters that are invalid on Windows, macOS, or Linux.
+    Collapses runs of underscores/hyphens and strips leading/trailing dots and spaces.
+
+    Args:
+        name (str): The raw filename (without extension).
+
+    Returns:
+        str: A filesystem-safe filename.
+    """
+    # Replace common problematic characters with underscores
+    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Replace whitespace with underscores
+    name = re.sub(r'\s+', '_', name)
+    # Remove any remaining non-ASCII or control characters
+    name = re.sub(r'[^\w.\-]', '', name)
+    # Collapse consecutive underscores or hyphens
+    name = re.sub(r'[_\-]{2,}', '_', name)
+    # Strip leading/trailing dots, underscores, and spaces
+    name = name.strip('._ ')
+    return name or 'transcription'
+
+
+def get_transcription_file(input_file: str, output_dir: Optional[str] = None) -> str:
     """
     Generates the output transcription file path.
 
     Args:
         input_file (str): Path to the input video file.
+        output_dir (str, optional): Directory for the output file.
+            Defaults to the current working directory.
 
     Returns:
         str: Path to the transcription file.
     """
     file_name = os.path.splitext(os.path.basename(input_file))[0]
-    file_path = os.path.dirname(os.path.abspath(input_file))
-    return os.path.join(file_path, f"{file_name}_transcription.txt")
+    file_name = sanitize_filename(file_name)
+    target_dir = os.path.abspath(output_dir) if output_dir else os.getcwd()
+    return os.path.join(target_dir, f"{file_name}_transcription.txt")
 
-def write_file(input_file: str, transcribed_text: List[str]) -> None:
+def write_file(input_file: str, transcribed_text: List[str], output_dir: Optional[str] = None) -> None:
     """
     Writes the transcribed text to a file.
 
     Args:
         input_file (str): Path to the input video file.
         transcribed_text (list): List of transcribed text segments.
+        output_dir (str, optional): Directory for the output file.
+            Defaults to the current working directory.
     """
     logging.info("Creating transcription file.")
-    txtfile_name = get_transcription_file(input_file)
+    txtfile_name = get_transcription_file(input_file, output_dir=output_dir)
 
     try:
         with open(txtfile_name, "w", encoding="utf-8") as file:
@@ -254,13 +285,14 @@ def download_youtube_audio(url: str) -> str:
         raise
 
 
-def transcribe_with_whisper(audio_files: List[str], model_size: str = "base") -> List[str]:
+def transcribe_with_whisper(audio_files: List[str], model_size: str = "base", device: str = "cpu") -> List[str]:
     """
     Transcribes audio segments using a local Whisper model via faster-whisper.
 
     Args:
         audio_files (list): List of audio file paths to transcribe.
         model_size (str): Whisper model size: tiny, base, small, medium, large (default: base).
+        device (str): Device for inference: 'cpu' or 'cuda' (default: cpu).
 
     Returns:
         list: List of transcribed text segments.
@@ -277,8 +309,63 @@ def transcribe_with_whisper(audio_files: List[str], model_size: str = "base") ->
             "Install it with: pip install faster-whisper"
         )
 
-    logging.info(f"Loading Whisper model: {model_size}")
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    compute_type = "float16" if device == "cuda" else "int8"
+
+    def _cuda_fallback_warning(error: Exception) -> None:
+        logging.warning(f"CUDA requested but not available: {error}")
+        logging.warning(
+            "To enable GPU acceleration, ensure the following:\n"
+            "  1. Install the full Whisper extra (includes required CUDA 12.x libs):\n"
+            "     uv sync --extra whisper  OR  pip install '.[whisper]'\n"
+            "  2. Verify NVIDIA driver: nvidia-smi\n"
+            "  3. Check CUDA toolkit: nvcc --version  (must be 12.x for faster-whisper)\n"
+            "  4. If on CUDA 13.x (e.g. RTX 50-series / Blackwell): ctranslate2 does not yet\n"
+            "     support CUDA 13.x. Use the PyTorch backend instead:\n"
+            "     pip install '.[whisper-pytorch]' && python main.py --backend openai-whisper\n"
+            "  See README Troubleshooting for step-by-step resolution.\n"
+            "Falling back to CPU."
+        )
+
+    if device == "cuda":
+        try:
+            import ctranslate2
+            supported = ctranslate2.get_supported_compute_types("cuda")
+            if not supported:
+                raise RuntimeError("CUDA device returned no supported compute types")
+        except Exception as e:
+            _cuda_fallback_warning(e)
+            device = "cpu"
+            compute_type = "int8"
+
+    logging.info(f"Loading Whisper model: {model_size} (device={device}, compute_type={compute_type})")
+    try:
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    except Exception as e:
+        if device == "cuda":
+            _cuda_fallback_warning(e)
+            device = "cpu"
+            compute_type = "int8"
+            logging.info(f"Loading Whisper model: {model_size} (device={device}, compute_type={compute_type})")
+            model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        else:
+            raise
+
+    def _transcribe_files(mdl: 'WhisperModel', files: List[str]) -> List[str]:
+        results = []
+        failures = []
+        for f in files:
+            try:
+                logging.info(f"Transcribing file: {f}")
+                segs, _ = mdl.transcribe(f, beam_size=5)
+                results.append(" ".join(s.text.strip() for s in segs))
+            except Exception as err:
+                logging.error(f"Error transcribing file {f}: {err}")
+                failures.append(f)
+        if failures and len(failures) == len(files):
+            raise RuntimeError(f"Failed to transcribe all {len(files)} audio segments.")
+        if failures:
+            logging.warning(f"Partial transcription: {len(failures)} of {len(files)} segments failed.")
+        return results
 
     txt_array = []
     failed_files = []
@@ -291,6 +378,14 @@ def transcribe_with_whisper(audio_files: List[str], model_size: str = "base") ->
             text = " ".join(segment.text.strip() for segment in segments)
             txt_array.append(text)
         except Exception as e:
+            # If CUDA fails at runtime (lazy-loaded DLLs), fall back to CPU for all files
+            if device == "cuda" and not txt_array:
+                _cuda_fallback_warning(e)
+                device = "cpu"
+                compute_type = "int8"
+                logging.info(f"Reloading Whisper model: {model_size} (device={device}, compute_type={compute_type})")
+                model = WhisperModel(model_size, device=device, compute_type=compute_type)
+                return _transcribe_files(model, audio_files)
             logging.error(f"Error transcribing file {file}: {e}")
             failed_files.append(file)
 
@@ -303,6 +398,173 @@ def transcribe_with_whisper(audio_files: List[str], model_size: str = "base") ->
         logging.warning(
             f"Partial transcription: {len(failed_files)} of {len(audio_files)} segments failed."
         )
+
+    logging.info("Transcription complete.")
+    return txt_array
+
+
+def transcribe_with_openai_whisper(audio_files: List[str], model_size: str = "base", device: str = "cpu") -> List[str]:
+    """
+    Transcribes audio segments using openai-whisper (PyTorch backend).
+
+    Compatible with CUDA 13.x and all CUDA versions supported by PyTorch.
+    2-3x slower than faster-whisper on the same hardware, but works without
+    ctranslate2's CUDA version constraints.
+
+    Args:
+        audio_files (list): List of audio file paths to transcribe.
+        model_size (str): Whisper model size: tiny, base, small, medium, large (default: base).
+        device (str): Device for inference: 'cpu' or 'cuda' (default: cpu).
+
+    Returns:
+        list: List of transcribed text segments.
+
+    Raises:
+        ImportError: If openai-whisper is not installed.
+        RuntimeError: If all segments fail to transcribe.
+    """
+    try:
+        import whisper
+    except ImportError:
+        raise ImportError(
+            "openai-whisper is required for the openai-whisper backend. "
+            "Install it with: pip install '.[whisper-pytorch]'\n"
+            "Then for CUDA support: pip install torch --index-url https://download.pytorch.org/whl/cu124"
+        )
+
+    import torch
+    if device == "cuda" and not torch.cuda.is_available():
+        logging.warning(
+            "CUDA requested but torch.cuda.is_available() is False. "
+            "Falling back to CPU. Verify PyTorch CUDA wheels are installed:\n"
+            "  pip install torch --index-url https://download.pytorch.org/whl/cu124"
+        )
+        device = "cpu"
+
+    logging.info(f"Loading openai-whisper model: {model_size} (device={device})")
+    model = whisper.load_model(model_size, device=device)
+
+    txt_array = []
+    failed_files = []
+    logging.info("Transcribing WAV file(s) with openai-whisper.")
+
+    for file in audio_files:
+        try:
+            logging.info(f"Transcribing file: {file}")
+            result = model.transcribe(file, beam_size=5)
+            text = " ".join(s["text"].strip() for s in result["segments"])
+            txt_array.append(text)
+        except Exception as e:
+            logging.error(f"Error transcribing file {file}: {e}")
+            failed_files.append(file)
+
+    if failed_files and len(failed_files) == len(audio_files):
+        raise RuntimeError(f"Failed to transcribe all {len(audio_files)} audio segments.")
+    if failed_files:
+        logging.warning(f"Partial transcription: {len(failed_files)} of {len(audio_files)} segments failed.")
+
+    logging.info("Transcription complete.")
+    return txt_array
+
+
+def transcribe_pipeline(
+    input_source: str,
+    backend: str = "azure",
+    model_size: str = "base",
+    device: str = "cpu",
+    azure_speech_key: Optional[str] = None,
+    azure_ai_location: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    progress_callback: Optional[Any] = None,
+) -> Tuple[str, str]:
+    """
+    Full transcription pipeline: source detection → audio extraction → segmentation →
+    backend dispatch → file writing.
+
+    Args:
+        input_source (str): Local file path or YouTube URL.
+        backend (str): 'azure', 'whisper', or 'openai-whisper'.
+        model_size (str): Whisper model size (only used for whisper backends).
+        device (str): 'cpu' or 'cuda' (only used for whisper backends).
+        azure_speech_key (str, optional): Azure Speech API key (required for azure backend).
+        azure_ai_location (str, optional): Azure region (required for azure backend).
+        output_dir (str, optional): Output directory for transcript file.
+        progress_callback (callable, optional): Called with (step: int, total: int, message: str).
+            CLI passes None; GUI passes a progress updater.
+
+    Returns:
+        Tuple[str, str]: (full_transcript_text, output_file_path)
+
+    Raises:
+        ValueError: If Azure backend is selected without credentials.
+        RuntimeError: On transcription failure.
+    """
+    import shutil
+
+    def _progress(step: int, total: int, message: str) -> None:
+        logging.info(f"[{step}/{total}] {message}")
+        if progress_callback is not None:
+            try:
+                progress_callback(step, total, message)
+            except Exception:
+                pass
+
+    total_steps = 5
+    youtube_temp_dir = None
+    audio_files: List[str] = []
+
+    try:
+        # Step 1: Validate credentials for Azure backend
+        _progress(1, total_steps, "Validating configuration...")
+        if backend == "azure":
+            if not azure_speech_key or not azure_ai_location:
+                raise ValueError(
+                    "Azure backend requires AZURE_SPEECH_KEY and AZURE_AI_LOCATION environment variables."
+                )
+
+        # Step 2: Resolve input source
+        _progress(2, total_steps, "Resolving input source...")
+        if is_youtube_url(input_source):
+            logging.info(f"YouTube URL detected: {input_source}")
+            input_file = download_youtube_audio(input_source)
+            youtube_temp_dir = os.path.dirname(input_file)
+        else:
+            if not check_file_exists(input_source):
+                raise FileNotFoundError(f"File does not exist: {input_source}")
+            input_file = input_source
+
+        # Step 3: Extract and process audio
+        _progress(3, total_steps, "Extracting and processing audio...")
+        audio = get_audio_channel(input_file)
+        if audio is None:
+            raise RuntimeError("Failed to process the audio channel.")
+        audio_files = load_audio_segments(audio)
+
+        # Step 4: Transcribe
+        _progress(4, total_steps, f"Transcribing with {backend} backend...")
+        if backend == "whisper":
+            transcribed_parts = transcribe_with_whisper(audio_files, model_size=model_size, device=device)
+        elif backend == "openai-whisper":
+            transcribed_parts = transcribe_with_openai_whisper(audio_files, model_size=model_size, device=device)
+        else:  # azure
+            assert azure_speech_key is not None and azure_ai_location is not None
+            transcribed_parts = transcribe_audio_segments(
+                audio_files, api_key=azure_speech_key, api_location=azure_ai_location
+            )
+
+        # Step 5: Write output
+        _progress(5, total_steps, "Writing transcription file...")
+        write_file(input_file, transcribed_parts, output_dir=output_dir)
+        output_file = get_transcription_file(input_file, output_dir=output_dir)
+        full_text = "\n\n".join(transcribed_parts)
+
+        return full_text, output_file
+
+    finally:
+        if audio_files:
+            clean_up_temp_files(audio_files)
+        if youtube_temp_dir and os.path.exists(youtube_temp_dir):
+            shutil.rmtree(youtube_temp_dir, ignore_errors=True)
 
     logging.info("Transcription complete.")
     return txt_array

@@ -3,7 +3,7 @@ name = "media-transcriber"
 version = "0.1.0"
 description = "Multi-backend video/audio transcription CLI — Azure Speech API and local Whisper, with YouTube support"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
     "pydub==0.25.1",
@@ -15,7 +15,22 @@ dependencies = [
 [project.optional-dependencies]
 whisper = [
     "faster-whisper>=1.0.0",
+    "nvidia-cublas-cu12>=12.4.2",
+    "nvidia-cudnn-cu12>=9.1.0",
 ]
+whisper-pytorch = [
+    "openai-whisper>=20231117",
+]
+gui = [
+    "gradio>=5.0.0",
+]
+all = [
+    "media-transcriber[whisper,whisper-pytorch,gui]",
+]
+
+[project.scripts]
+media-transcriber = "main:main"
+media-transcriber-gui = "app:launch"
 
 [dependency-groups]
 dev = [

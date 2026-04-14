@@ -170,7 +170,7 @@ class TestMain:
         mock_get_audio.assert_called_with("test.mp4")
         mock_load.assert_called_with(mock_audio)
         mock_transcribe.assert_called_with(["seg1.wav", "seg2.wav"], api_key="key", api_location="loc")
-        mock_write.assert_called_with("test.mp4", ["First text", "Second text"])
+        mock_write.assert_called_with("test.mp4", ["First text", "Second text"], output_dir=None)
         mock_cleanup.assert_called_with(["seg1.wav", "seg2.wav"])
 
     def test_whisper_backend_skips_azure_creds(self, monkeypatch):
@@ -205,7 +205,7 @@ class TestMain:
              patch("helper.clean_up_temp_files"), \
              patch("main.os.startfile"):
             main.main()
-        mock_transcribe.assert_called_once_with(["seg1.wav"], model_size="small")
+        mock_transcribe.assert_called_once_with(["seg1.wav"], model_size="small", device="cpu")
 
     def test_youtube_url_downloads_audio(self, monkeypatch):
         """Should call download_youtube_audio when input is a YouTube URL."""
