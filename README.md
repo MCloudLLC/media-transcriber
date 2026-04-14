@@ -154,9 +154,9 @@ Specify a model with `--model`:
 uv run python main.py video.mp4 --backend whisper --model large
 ```
 
-## GUI (Gradio)
+## Desktop GUI (CustomTkinter)
 
-A Gradio-based GUI is available for easier use without the command line.
+A native desktop GUI is available for easier use without the command line.
 
 ### Installation
 
@@ -181,22 +181,22 @@ Or directly:
 uv run python app.py
 ```
 
-Open http://localhost:7860 in your browser.
+Opens a native desktop window — no browser required.
 
 ### GUI Features
 
-- Upload local video/audio files or paste a YouTube URL
+- Browse local video/audio files or paste a YouTube URL
 - Select backend: **Whisper** (fast, CUDA 11/12), **OpenAI-Whisper** (CUDA 13.x), or **Azure**
 - Choose Whisper model size and device (CPU or CUDA GPU)
 - Real-time progress display
-- Copyable transcription output with file download
+- Copyable transcription output with Save As dialog
 
 ## Project Structure
 
 ```
 media-transcriber/
 ├── main.py              # CLI entry point; argument parsing and orchestration
-├── app.py               # Gradio GUI entry point
+├── app.py               # Desktop GUI entry point (CustomTkinter)
 ├── helper.py            # Audio processing, YouTube download, transcription backends
 ├── pyproject.toml       # Project metadata and dependencies (uv)
 ├── uv.lock              # Locked dependency versions

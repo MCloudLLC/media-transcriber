@@ -22,7 +22,7 @@ whisper-pytorch = [
     "openai-whisper>=20231117",
 ]
 gui = [
-    "gradio>=5.0.0",
+    "customtkinter>=5.2.0",
 ]
 all = [
     "media-transcriber[whisper,whisper-pytorch,gui]",
