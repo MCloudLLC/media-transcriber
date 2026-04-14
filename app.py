@@ -82,7 +82,7 @@ class App:
         row += 1
         self._backend_seg = ctk.CTkSegmentedButton(
             left,
-            values=["whisper", "openai-whisper", "azure"],
+            values=["openai-whisper", "azure"],
             command=self._on_backend_change,
         )
         self._backend_seg.set("openai-whisper")

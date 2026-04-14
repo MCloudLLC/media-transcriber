@@ -173,40 +173,6 @@ class TestMain:
         mock_write.assert_called_with("test.mp4", ["First text", "Second text"], output_dir=None)
         mock_cleanup.assert_called_with(["seg1.wav", "seg2.wav"])
 
-    def test_whisper_backend_skips_azure_creds(self, monkeypatch):
-        """Should not require Azure credentials when using whisper backend."""
-        monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
-        monkeypatch.delenv("AZURE_AI_LOCATION", raising=False)
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "whisper"])
-        monkeypatch.setattr(sys, "platform", "win32")
-        with patch("helper.is_youtube_url", return_value=False), \
-             patch("helper.check_file_exists", return_value=True), \
-             patch("helper.get_audio_channel", return_value=MagicMock()), \
-             patch("helper.load_audio_segments", return_value=["seg1.wav"]), \
-             patch("helper.transcribe_with_whisper", return_value=["transcribed"]), \
-             patch("helper.write_file"), \
-             patch("helper.get_transcription_file", return_value="output.txt"), \
-             patch("helper.clean_up_temp_files"), \
-             patch("main.os.startfile"):
-            main.main()  # Should not raise SystemExit
-
-    def test_whisper_backend_calls_transcribe_with_whisper(self, monkeypatch):
-        """Should call helper.transcribe_with_whisper with correct model when backend is whisper."""
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "whisper", "--model", "small"])
-        monkeypatch.setattr(sys, "platform", "win32")
-        mock_transcribe = MagicMock(return_value=["text"])
-        with patch("helper.is_youtube_url", return_value=False), \
-             patch("helper.check_file_exists", return_value=True), \
-             patch("helper.get_audio_channel", return_value=MagicMock()), \
-             patch("helper.load_audio_segments", return_value=["seg1.wav"]), \
-             patch("helper.transcribe_with_whisper", mock_transcribe), \
-             patch("helper.write_file"), \
-             patch("helper.get_transcription_file", return_value="output.txt"), \
-             patch("helper.clean_up_temp_files"), \
-             patch("main.os.startfile"):
-            main.main()
-        mock_transcribe.assert_called_once_with(["seg1.wav"], model_size="small", device="cuda")
-
     def test_youtube_url_downloads_audio(self, monkeypatch):
         """Should call download_youtube_audio when input is a YouTube URL."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")

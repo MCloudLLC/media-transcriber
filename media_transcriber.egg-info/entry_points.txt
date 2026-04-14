@@ -1,0 +1,3 @@
+[console_scripts]
+media-transcriber = main:main
+media-transcriber-gui = app:launch

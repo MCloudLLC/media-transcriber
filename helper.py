@@ -285,124 +285,6 @@ def download_youtube_audio(url: str) -> str:
         raise
 
 
-def transcribe_with_whisper(audio_files: List[str], model_size: str = "base", device: str = "cpu") -> List[str]:
-    """
-    Transcribes audio segments using a local Whisper model via faster-whisper.
-
-    Args:
-        audio_files (list): List of audio file paths to transcribe.
-        model_size (str): Whisper model size: tiny, base, small, medium, large (default: base).
-        device (str): Device for inference: 'cpu' or 'cuda' (default: cpu).
-
-    Returns:
-        list: List of transcribed text segments.
-
-    Raises:
-        ImportError: If faster-whisper is not installed.
-        RuntimeError: If all segments fail to transcribe.
-    """
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError:
-        raise ImportError(
-            "faster-whisper is required for the Whisper backend. "
-            "Install it with: pip install faster-whisper"
-        )
-
-    compute_type = "float16" if device == "cuda" else "int8"
-
-    def _cuda_fallback_warning(error: Exception) -> None:
-        logging.warning(f"CUDA requested but not available: {error}")
-        logging.warning(
-            "To enable GPU acceleration, ensure the following:\n"
-            "  1. Install the full Whisper extra (includes required CUDA 12.x libs):\n"
-            "     uv sync --extra whisper  OR  pip install '.[whisper]'\n"
-            "  2. Verify NVIDIA driver: nvidia-smi\n"
-            "  3. Check CUDA toolkit: nvcc --version  (must be 12.x for faster-whisper)\n"
-            "  4. If on CUDA 13.x (e.g. RTX 50-series / Blackwell): ctranslate2 does not yet\n"
-            "     support CUDA 13.x. Use the PyTorch backend instead:\n"
-            "     pip install '.[whisper-pytorch]' && python main.py --backend openai-whisper\n"
-            "  See README Troubleshooting for step-by-step resolution.\n"
-            "Falling back to CPU."
-        )
-
-    if device == "cuda":
-        try:
-            import ctranslate2
-            supported = ctranslate2.get_supported_compute_types("cuda")
-            if not supported:
-                raise RuntimeError("CUDA device returned no supported compute types")
-        except Exception as e:
-            _cuda_fallback_warning(e)
-            device = "cpu"
-            compute_type = "int8"
-
-    logging.info(f"Loading Whisper model: {model_size} (device={device}, compute_type={compute_type})")
-    try:
-        model = WhisperModel(model_size, device=device, compute_type=compute_type)
-    except Exception as e:
-        if device == "cuda":
-            _cuda_fallback_warning(e)
-            device = "cpu"
-            compute_type = "int8"
-            logging.info(f"Loading Whisper model: {model_size} (device={device}, compute_type={compute_type})")
-            model = WhisperModel(model_size, device=device, compute_type=compute_type)
-        else:
-            raise
-
-    def _transcribe_files(mdl: 'WhisperModel', files: List[str]) -> List[str]:
-        results = []
-        failures = []
-        for f in files:
-            try:
-                logging.info(f"Transcribing file: {f}")
-                segs, _ = mdl.transcribe(f, beam_size=5)
-                results.append(" ".join(s.text.strip() for s in segs))
-            except Exception as err:
-                logging.error(f"Error transcribing file {f}: {err}")
-                failures.append(f)
-        if failures and len(failures) == len(files):
-            raise RuntimeError(f"Failed to transcribe all {len(files)} audio segments.")
-        if failures:
-            logging.warning(f"Partial transcription: {len(failures)} of {len(files)} segments failed.")
-        return results
-
-    txt_array = []
-    failed_files = []
-    logging.info("Transcribing WAV file(s) with Whisper.")
-
-    for file in audio_files:
-        try:
-            logging.info(f"Transcribing file: {file}")
-            segments, _ = model.transcribe(file, beam_size=5)
-            text = " ".join(segment.text.strip() for segment in segments)
-            txt_array.append(text)
-        except Exception as e:
-            # If CUDA fails at runtime (lazy-loaded DLLs), fall back to CPU for all files
-            if device == "cuda" and not txt_array:
-                _cuda_fallback_warning(e)
-                device = "cpu"
-                compute_type = "int8"
-                logging.info(f"Reloading Whisper model: {model_size} (device={device}, compute_type={compute_type})")
-                model = WhisperModel(model_size, device=device, compute_type=compute_type)
-                return _transcribe_files(model, audio_files)
-            logging.error(f"Error transcribing file {file}: {e}")
-            failed_files.append(file)
-
-    if failed_files and len(failed_files) == len(audio_files):
-        raise RuntimeError(
-            f"Failed to transcribe all {len(audio_files)} audio segments."
-        )
-
-    if failed_files:
-        logging.warning(
-            f"Partial transcription: {len(failed_files)} of {len(audio_files)} segments failed."
-        )
-
-    logging.info("Transcription complete.")
-    return txt_array
-
-
 def transcribe_with_openai_whisper(audio_files: List[str], model_size: str = "base", device: str = "cpu") -> List[str]:
     """
     Transcribes audio segments using openai-whisper (PyTorch backend).
@@ -542,9 +424,7 @@ def transcribe_pipeline(
 
         # Step 4: Transcribe
         _progress(4, total_steps, f"Transcribing with {backend} backend...")
-        if backend == "whisper":
-            transcribed_parts = transcribe_with_whisper(audio_files, model_size=model_size, device=device)
-        elif backend == "openai-whisper":
+        if backend == "openai-whisper":
             transcribed_parts = transcribe_with_openai_whisper(audio_files, model_size=model_size, device=device)
         else:  # azure
             assert azure_speech_key is not None and azure_ai_location is not None

@@ -19,11 +19,10 @@ def main():
     parser.add_argument("input", help="Path to a local video file or a YouTube URL")
     parser.add_argument(
         "--backend",
-        choices=["azure", "whisper", "openai-whisper"],
+        choices=["azure", "openai-whisper"],
         default="openai-whisper",
         help=(
-            "Transcription backend: 'openai-whisper' (default, local, PyTorch, CUDA 13.x compatible), "
-            "'whisper' (local, faster-whisper, CUDA 11/12), "
+            "Transcription backend: 'openai-whisper' (default, local, PyTorch, CUDA 13.x compatible) "
             "or 'azure' (cloud, requires AZURE_SPEECH_KEY and AZURE_AI_LOCATION)"
         ),
     )
