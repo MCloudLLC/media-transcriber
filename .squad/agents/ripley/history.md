@@ -94,3 +94,67 @@ Completed implementation of all critical, high, and medium severity fixes identi
 - Includes API discoveries, design rationale, testing notes for Hudson
 
 **Status:** Implementation complete; ready for Dallas review and Hudson test coverage.
+
+### 2026-04-13 — OpenAI-Whisper Backend + Gradio GUI (Phase 1) Implemented
+
+Completed implementation of Dallas's approved architecture for multi-backend support and GUI (Phase 1).
+
+**Key Implementation Decisions:**
+
+1. **`transcribe_pipeline()` Signature**
+   - Created shared pipeline function with `progress_callback: Optional[Any]` parameter
+   - Signature: `(input_source, backend, model_size, device, azure_speech_key, azure_ai_location, output_dir, progress_callback) -> Tuple[str, str]`
+   - Returns `(full_transcript_text, output_file_path)` for both CLI and GUI consumption
+   - CLI passes `None` for progress_callback; GUI passes Gradio `gr.Progress` updater
+   - Uses 5-step progress model: validate → resolve source → extract audio → transcribe → write output
+   - Cleanup handled in `finally` block: temp audio files + YouTube temp dirs
+
+2. **OpenAI-Whisper API Differences**
+   - `openai-whisper` uses `whisper.load_model()` vs faster-whisper's `WhisperModel()`
+   - Returns dict with `result["segments"]` vs faster-whisper's iterator
+   - PyTorch device detection: `torch.cuda.is_available()` vs ctranslate2's `get_supported_compute_types()`
+   - Error message includes PyTorch CUDA wheel installation instructions
+   - Documented 2-3x slower than faster-whisper due to PyTorch overhead
+
+3. **Gradio 5.x Patterns Used**
+   - `gr.Blocks()` with `gr.Tabs()` for Phase 1 (Transcribe tab only; Q&A tab in Phase 2)
+   - Dynamic visibility: `backend_radio.change()` handler updates model/device/Azure credential visibility
+   - `gr.Progress(track_tqdm=False)` for manual progress updates via callback
+   - File upload with `file_types` filter for common video/audio formats
+   - `gr.Textbox(type="password")` for Azure key input
+   - `gr.File()` output for download link
+   - `create_app()` returns `gr.Blocks` demo; `launch()` calls `demo.launch(server_port=7860)`
+
+4. **pyproject.toml Extras Structure**
+   - `[whisper]` — faster-whisper + CUDA 12.x shims (existing)
+   - `[whisper-pytorch]` — openai-whisper for CUDA 13.x users
+   - `[gui]` — gradio>=5.0.0
+   - `[all]` — installs all three extras
+   - `[project.scripts]` — `media-transcriber` (CLI) and `media-transcriber-gui` (GUI) entry points
+   - Updated `requires-python` to `>=3.10` (Gradio 5.x requirement; was `>=3.9`)
+
+5. **CUDA 13.x Fallback Warning Update**
+   - Updated `_cuda_fallback_warning()` with 4-step troubleshooting path
+   - Step 1: Install `[whisper]` extra (provides CUDA 12.x shims automatically)
+   - Step 2: Verify driver + toolkit version
+   - Step 3: Check PATH for CUDA binaries
+   - Step 4: **NEW:** If CUDA 13.x, switch to `--backend openai-whisper` (PyTorch tracks CUDA faster)
+   - Mentions `[whisper-pytorch]` extra and links to ctranslate2 CUDA 13.x tracking issue
+
+**Files Modified:**
+- `helper.py`: Added `transcribe_with_openai_whisper()`, `transcribe_pipeline()`, updated `_cuda_fallback_warning()`
+- `main.py`: Refactored to thin wrapper over `helper.transcribe_pipeline()`, added `openai-whisper` backend choice
+- `pyproject.toml`: Added `[whisper-pytorch]`, `[gui]`, `[all]` extras; added `[project.scripts]`; updated `requires-python`
+- `README.md`: Added GUI section, openai-whisper usage examples, CUDA 13.x troubleshooting sub-section
+- `app.py`: **NEW FILE** — Gradio 5.x GUI with backend/model/device selectors, progress, file/URL input, copy + download
+
+**Verification:**
+- ✅ All tests pass (78 passed, 3 skipped)
+- ✅ Syntax validation clean for helper.py, main.py, app.py
+- ✅ Dependency resolution succeeds with new Python >=3.10 requirement
+- ✅ Commit message follows convention with Co-authored-by trailer
+
+**Documentation:**
+- Created `.squad/decisions/inbox/ripley-phase1-impl.md` with implementation summary
+
+**Status:** Phase 1 complete; committed to main branch (2581505).
