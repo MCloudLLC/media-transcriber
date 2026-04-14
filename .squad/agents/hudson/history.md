@@ -1,3 +1,5 @@
+<!-- markdownlint-disable -->
+
 # Hudson — History
 
 ## Core Context
@@ -201,3 +203,10 @@ Performance: pytest-benchmark 4.0.0 (Q&A latency tests)
 - Alternative: Refactor app.py for dependency injection to enable pure unit testing
 
 **Status:** Core `qa.py` logic 100% covered. App integration requires manual QA or display server.
+
+### 2026-04-14: VS Code Problems fix in Q&A app tests (type-safe test patterns)
+
+- Updated `tests/unit/test_app_qa_tab.py` to use `typing.Protocol` + `typing.cast` for private `App` test access, eliminating unknown-attribute Problems without touching production code.
+- Replaced direct assignment `app.root.after = ...` with `monkeypatch.setattr(..., raising=False)` and a typed callback shim to avoid method-signature/type mismatch warnings.
+- Aligned tests with current `App` attribute names (`_current_transcript`, `_qa_status_label`, `_chat_box`, `_llm_key_entry`, `_llm_model_entry`) to remove stale references.
+- Targeted validation passed: `uv run pytest tests/unit/test_app_qa_tab.py -q` → `8 passed`.

@@ -1,3 +1,5 @@
+<!-- markdownlint-disable -->
+
 # Ripley — History
 
 ## Core Context
@@ -158,3 +160,26 @@ Completed implementation of Dallas's approved architecture for multi-backend sup
 - Created `.squad/decisions/inbox/ripley-phase1-impl.md` with implementation summary
 
 **Status:** Phase 1 complete; committed to main branch (2581505).
+
+### 2026-04-14 — VS Code Problems: typing-only production fixes in helper.py and qa.py
+
+Implemented minimal, behavior-preserving typing fixes requested by Copilot in production code only.
+
+**What changed:**
+
+- **`helper.py` (`transcribe_with_openai_whisper`)**
+  - Replaced direct segment indexing (`s["text"]`) with guarded extraction from `result["segments"]`.
+  - Added fallback to top-level `result["text"]` when segment list is missing/empty.
+  - Outcome: same functional intent, but safer static typing and runtime handling.
+
+- **`qa.py` (`_ask_rag`, `_call_llm`)**
+  - Guarded `n_results` to always be a positive `int` before calling Chroma query.
+  - Narrowed/validated query result document types before joining.
+  - Ensured `_call_llm` always returns `str` by normalizing nullable content to empty string.
+
+**Validation:**
+
+- `uv run pytest tests/unit/test_qa.py tests/unit/test_transcribe_audio_segments.py` → **20 passed**
+- VS Code diagnostics check on `helper.py` and `qa.py` → **no errors**
+
+**Status:** Ready for Dallas review; no architecture changes introduced.
