@@ -234,6 +234,36 @@ def is_youtube_url(input_source: str) -> bool:
     return bool(_YOUTUBE_PATTERN.match(input_source))
 
 
+def check_whisper_model_cache(model_size: str) -> bool:
+    """
+    Returns True if the given openai-whisper model is already cached on disk.
+
+    Validates by checking file presence and non-zero size. Hash verification
+    is intentionally left to whisper's own downloader on first use.
+
+    Args:
+        model_size (str): Whisper model size (e.g., 'tiny', 'base', 'large-v3').
+
+    Returns:
+        bool: True if the model file exists and is non-empty in the whisper cache.
+    """
+    try:
+        import whisper
+        import urllib.parse as _urlparse
+    except ImportError:
+        return False
+
+    models: Dict[str, str] = getattr(whisper, "_MODELS", {})
+    url = models.get(model_size)
+    if not url:
+        return False
+
+    filename = _urlparse.unquote(url.split("/")[-1])
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
+    cached_path = os.path.join(cache_dir, filename)
+    return os.path.exists(cached_path) and os.path.getsize(cached_path) > 0
+
+
 def download_youtube_audio(url: str) -> str:
     """
     Downloads audio from a YouTube URL using yt-dlp and converts it to WAV.
@@ -330,38 +360,49 @@ def transcribe_with_openai_whisper(audio_files: List[str], model_size: str = "ba
     failed_files = []
     logging.info("Transcribing WAV file(s) with openai-whisper.")
 
-    for file in audio_files:
+    try:
+        for file in audio_files:
+            try:
+                logging.info(f"Transcribing file: {file}")
+                result = model.transcribe(file, beam_size=5)
+                segments = result.get("segments", []) if isinstance(result, dict) else []
+                segment_texts: List[str] = []
+                for segment in segments:
+                    if isinstance(segment, dict):
+                        raw_text = segment.get("text")
+                        if isinstance(raw_text, str):
+                            cleaned = raw_text.strip()
+                            if cleaned:
+                                segment_texts.append(cleaned)
+
+                text = " ".join(segment_texts)
+                if not text and isinstance(result, dict):
+                    fallback_text = result.get("text")
+                    if isinstance(fallback_text, str):
+                        text = fallback_text.strip()
+
+                txt_array.append(text)
+            except Exception as e:
+                logging.error(f"Error transcribing file {file}: {e}")
+                failed_files.append(file)
+
+        if failed_files and len(failed_files) == len(audio_files):
+            raise RuntimeError(f"Failed to transcribe all {len(audio_files)} audio segments.")
+        if failed_files:
+            logging.warning(f"Partial transcription: {len(failed_files)} of {len(audio_files)} segments failed.")
+
+        logging.info("Transcription complete.")
+        return txt_array
+    finally:
+        # Unload model from GPU to free VRAM regardless of success or failure
         try:
-            logging.info(f"Transcribing file: {file}")
-            result = model.transcribe(file, beam_size=5)
-            segments = result.get("segments", []) if isinstance(result, dict) else []
-            segment_texts: List[str] = []
-            for segment in segments:
-                if isinstance(segment, dict):
-                    raw_text = segment.get("text")
-                    if isinstance(raw_text, str):
-                        cleaned = raw_text.strip()
-                        if cleaned:
-                            segment_texts.append(cleaned)
-
-            text = " ".join(segment_texts)
-            if not text and isinstance(result, dict):
-                fallback_text = result.get("text")
-                if isinstance(fallback_text, str):
-                    text = fallback_text.strip()
-
-            txt_array.append(text)
-        except Exception as e:
-            logging.error(f"Error transcribing file {file}: {e}")
-            failed_files.append(file)
-
-    if failed_files and len(failed_files) == len(audio_files):
-        raise RuntimeError(f"Failed to transcribe all {len(audio_files)} audio segments.")
-    if failed_files:
-        logging.warning(f"Partial transcription: {len(failed_files)} of {len(audio_files)} segments failed.")
-
-    logging.info("Transcription complete.")
-    return txt_array
+            model.to("cpu")
+        except Exception:
+            pass
+        del model
+        if device != "cpu":
+            torch.cuda.empty_cache()
+            logging.info("Whisper model unloaded from GPU; CUDA cache cleared.")
 
 
 def transcribe_pipeline(

@@ -11,6 +11,11 @@ __pycache__/
 # Generated transcription output files
 *_transcription.txt
 
+# Build / packaging artifacts
+*.egg-info/
+dist/
+build/
+
 # Virtual environment
 venv/
 .venv/

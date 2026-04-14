@@ -148,14 +148,16 @@ def test_qa_tab_layout_widgets_created(mock_gui_dependencies):
     # Verify key widgets exist
     # Left panel widgets
     expected_attrs = [
-        "_llm_url_entry",      # LLM URL entry
-        "_llm_key_entry",      # API key entry
-        "_llm_model_entry",    # Model name entry
-        "_question_box",       # Question text box
-        "_ask_btn",           # Ask button
-        "_qa_status_label",   # Status label
+        "_llm_url_entry",           # LLM URL entry
+        "_llm_key_entry",           # API key entry
+        "_llm_model_entry",         # Model name entry
+        "_question_box",            # Question text box
+        "_ask_btn",                 # Ask button
+        "_qa_status_label",         # Status label
+        "_load_transcript_btn",     # Load transcript button
+        "_loaded_transcript_label", # Loaded file label
         # Right panel
-        "_chat_box",          # Chat history textbox
+        "_chat_box",                # Chat history textbox
     ]
     
     # At least some of these should exist

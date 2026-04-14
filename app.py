@@ -240,7 +240,15 @@ class App:
         self._transcribe_btn.configure(state="disabled")
         self._progress_bar.set(0)
         self._progress_bar.grid()
-        self._status_label.configure(text="Transcribing...")
+        if backend == "openai-whisper":
+            initial_msg = (
+                "Transcribing..."
+                if helper.check_whisper_model_cache(model_size)
+                else "Downloading model (first use)..."
+            )
+        else:
+            initial_msg = "Transcribing..."
+        self._status_label.configure(text=initial_msg)
         self._set_transcript("")
 
         threading.Thread(
@@ -292,9 +300,11 @@ class App:
         if text:
             self._ask_btn.configure(state="normal")
             self._qa_status_label.configure(text="Ready")
+            self._loaded_transcript_label.configure(text="From transcription")
         else:
             self._ask_btn.configure(state="disabled")
-            self._qa_status_label.configure(text="Transcribe a file first")
+            self._qa_status_label.configure(text="Transcribe or load a transcript first")
+            self._loaded_transcript_label.configure(text="No transcript loaded")
 
     def _copy_transcript(self):
         text = self._transcript_box.get("1.0", "end").strip()
@@ -328,6 +338,25 @@ class App:
         left.grid_columnconfigure(0, weight=1)
 
         row = 0
+
+        # Load pre-created transcript
+        self._load_transcript_btn = ctk.CTkButton(
+            left, text="Load transcript...", command=self._load_qa_transcript
+        )
+        self._load_transcript_btn.grid(row=row, column=0, sticky="ew", padx=10, pady=(10, 2))
+        row += 1
+
+        self._loaded_transcript_label = ctk.CTkLabel(
+            left, text="No transcript loaded", text_color="gray", anchor="w", wraplength=220
+        )
+        self._loaded_transcript_label.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        row += 1
+
+        ctk.CTkFrame(left, height=2, fg_color="gray50").grid(
+            row=row, column=0, sticky="ew", padx=10, pady=(0, 10)
+        )
+        row += 1
+
         ctk.CTkLabel(left, text="LLM URL:", anchor="w").grid(
             row=row, column=0, sticky="ew", padx=10, pady=(10, 2)
         )
@@ -380,7 +409,7 @@ class App:
         row += 1
 
         self._qa_status_label = ctk.CTkLabel(
-            left, text="Transcribe a file first", anchor="w", wraplength=220
+            left, text="Transcribe or load a transcript first", anchor="w", wraplength=220
         )
         self._qa_status_label.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
 
@@ -450,6 +479,27 @@ class App:
         self._chat_box.configure(state="disabled")
         self._qa = None
         self._qa_status_label.configure(text="Ready")
+
+    def _load_qa_transcript(self):
+        path = filedialog.askopenfilename(
+            title="Load transcript file",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read().strip()
+            if not text:
+                self._qa_status_label.configure(text="❌ File is empty.")
+                return
+            self._current_transcript = text
+            self._qa = None
+            self._loaded_transcript_label.configure(text=os.path.basename(path))
+            self._ask_btn.configure(state="normal")
+            self._qa_status_label.configure(text=f"Loaded: {os.path.basename(path)}")
+        except Exception as e:
+            self._qa_status_label.configure(text=f"❌ Error loading file: {e}")
 
     def launch(self):
         self.root.mainloop()
