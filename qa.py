@@ -8,6 +8,8 @@ Hybrid routing:
 Requires [qa] extra: uv sync --extra qa
 """
 
+import logging
+
 _TOKEN_THRESHOLD = 25_000
 _CHUNK_SIZE = 500
 _CHUNK_OVERLAP = 50
@@ -45,11 +47,13 @@ class TranscriptQA:
         llm_url: str = "http://localhost:11434/v1",
         api_key: str | None = None,
         model: str = "llama3",
+        device: str | None = None,
     ):
         self._transcript = transcript_text
         self._llm_url = llm_url
         self._api_key = api_key
         self._model = model
+        self._device = device  # None = auto-detect at setup time
         self._use_rag = _estimate_tokens(transcript_text) >= _TOKEN_THRESHOLD
         self._rag_ready = False
 
@@ -83,8 +87,17 @@ class TranscriptQA:
                 "Q&A RAG requires the [qa] extra. Install with: uv sync --extra qa"
             ) from exc
 
+        device = self._device
+        if device is None:
+            try:
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+        logging.info(f"Loading sentence-transformers embedding model (device={device})")
+
         chunks = _chunk_text(self._transcript)
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+        model = SentenceTransformer("all-MiniLM-L6-v2", device=device)
         embeddings = model.encode(chunks).tolist()
 
         client = chromadb.Client()
@@ -116,11 +129,17 @@ class TranscriptQA:
     def _ask_rag(self, question: str) -> str:
         """RAG path: retrieve relevant chunks, send as context to LLM."""
         query_embedding = self._rag_model.encode([question]).tolist()
+        n_results = _TOP_K if _TOP_K > 0 else 1
         results = self._rag_collection.query(
             query_embeddings=query_embedding,
-            n_results=_TOP_K,
+            n_results=n_results,
         )
-        docs = results.get("documents", [[]])[0]
+        docs: list[str] = []
+        documents = results.get("documents") if isinstance(results, dict) else None
+        if isinstance(documents, list) and documents:
+            first_group = documents[0]
+            if isinstance(first_group, list):
+                docs = [doc for doc in first_group if isinstance(doc, str)]
         chunks_text = "\n\n---\n\n".join(docs)
         user_message = _RAG_TEMPLATE.format(chunks=chunks_text, question=question)
         return self._call_llm(user_message)
@@ -134,6 +153,7 @@ class TranscriptQA:
                     {"role": "user", "content": user_message},
                 ],
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            return content if isinstance(content, str) else ""
         except Exception as exc:
             raise RuntimeError(f"LLM call failed: {exc}") from exc

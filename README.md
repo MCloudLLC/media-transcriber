@@ -1,6 +1,6 @@
 # Video/Audio to Text Transcription
 
-A flexible transcription tool that extracts audio from local video/audio files or YouTube URLs and transcribes using either Azure Speech-to-Text (cloud) or Whisper (local/offline). Results are saved to a text file and automatically opened for review.
+A flexible transcription tool that extracts audio from local video/audio files or YouTube URLs and transcribes using either Azure Speech-to-Text (cloud) or OpenAI-Whisper (local/offline). Results are saved to a text file and automatically opened for review.
 
 ## Features
 
@@ -10,9 +10,8 @@ A flexible transcription tool that extracts audio from local video/audio files o
   - YouTube URLs (audio extracted automatically via yt-dlp)
 
 - **Dual Transcription Backends:**
-  - **Azure Speech-to-Text** (cloud-based, requires API credentials, default)
-  - **Whisper** (local/offline via faster-whisper, optional, no API key needed)
-  - **OpenAI-Whisper** (local/offline via openai-whisper + PyTorch, CUDA 13.x compatible)
+  - **OpenAI-Whisper** (local/offline via openai-whisper + PyTorch, default, no API key needed, GPU-accelerated)
+  - **Azure Speech-to-Text** (cloud-based, requires API credentials)
 
 - **Audio Processing:**
   - Automatic 16kHz mono WAV conversion for optimal transcription quality
@@ -59,20 +58,31 @@ A flexible transcription tool that extracts audio from local video/audio files o
 
 ## Configuration
 
-### Azure Credentials (Azure Backend Only)
+### Using a `.env` File
 
-If using `--backend azure`, set these environment variables before running:
+Create a `.env` file in the project root by copying the provided example:
+
+```bash
+cp .env.example .env
+# Edit .env and fill in your values
+```
+
+The `.env` file is loaded automatically on startup (both CLI and GUI). See `.env.example` for all supported variables. The `.env` file is listed in `.gitignore` and will never be committed.
+
+### Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `AZURE_SPEECH_KEY` | Azure backend only | Azure Speech-to-Text API key |
+| `AZURE_AI_LOCATION` | Azure backend only | Azure region (e.g. `eastus`) |
+| `OPENAI_API_KEY` | Q&A with hosted LLMs only | API key for OpenAI or compatible endpoint |
+
+You can also set these as shell environment variables if you prefer not to use a `.env` file.
 
 **Linux/macOS:**
 ```bash
 export AZURE_SPEECH_KEY="your_azure_speech_api_key"
 export AZURE_AI_LOCATION="your_azure_ai_location"
-```
-
-**Windows (Command Prompt):**
-```cmd
-set AZURE_SPEECH_KEY=your_azure_speech_api_key
-set AZURE_AI_LOCATION=your_azure_ai_location
 ```
 
 **Windows (PowerShell):**
@@ -81,53 +91,58 @@ $env:AZURE_SPEECH_KEY="your_azure_speech_api_key"
 $env:AZURE_AI_LOCATION="your_azure_ai_location"
 ```
 
-**Note:** Azure credentials are only required for `--backend azure`. The Whisper backend requires no credentials.
-
 ## Usage
 
 ### Basic Command Format
 
 ```bash
-uv run python main.py <input> [--backend azure|whisper|openai-whisper] [--model tiny|base|small|medium|large]
+uv run python main.py <input> [--backend azure|openai-whisper] [--model SIZE] [--device cpu|cuda] [--output DIR]
 ```
 
 **Arguments:**
 - `<input>` — Path to a local video/audio file OR a YouTube URL
-- `--backend` — Transcription backend: `azure` (default), `whisper`, or `openai-whisper`
-- `--model` — Whisper model size (default: `base`, only used with `--backend whisper` or `--backend openai-whisper`)
+- `--backend` — Transcription backend: `openai-whisper` (default) or `azure`
+- `--model` — Whisper model size (default: `base`); see [Model Sizes](#model-sizes) below
+- `--device` — Device for Whisper inference: `cuda` (default) or `cpu`
+- `--output` — Output directory for the transcription file (default: current working directory)
 
 ### Examples
 
-**Local file with Azure backend (default):**
+**Local file with OpenAI-Whisper (default):**
 ```bash
 uv run python main.py /path/to/video.mp4
 ```
 
-**Local file with Whisper backend:**
+**GPU-accelerated transcription:**
 ```bash
-uv run python main.py /path/to/video.mp4 --backend whisper
+uv run python main.py /path/to/video.mp4 --device cuda
 ```
 
-**Local file with specific Whisper model:**
+**Local file with Azure backend:**
 ```bash
-uv run python main.py /path/to/audio.mp3 --backend whisper --model small
+uv run python main.py /path/to/video.mp4 --backend azure
 ```
 
-**CUDA 13.x users (RTX 50-series):**
+**Local file with a larger Whisper model:**
 ```bash
-uv run python main.py /path/to/video.mp4 --backend openai-whisper --device cuda
+uv run python main.py /path/to/audio.mp3 --model small
 ```
 
 **YouTube URL:**
 ```bash
-uv run python main.py https://www.youtube.com/watch?v=dQw4w9WgXcQ --backend whisper
+uv run python main.py https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ```
 
-The transcription will be saved to `<filename>_transcription.txt` in the current directory and automatically opened.
+**Save transcription to a specific folder:**
+```bash
+uv run python main.py /path/to/video.mp4 --output /path/to/output/
+```
+
+The transcription will be saved to `<filename>_transcription.txt` in the output directory and automatically opened.
 
 ## Whisper Backend
 
-The Whisper backend provides local, offline transcription with no API credentials required.
+The OpenAI-Whisper backend provides local, offline transcription with no API credentials required. It uses PyTorch for inference and supports GPU acceleration via CUDA.
 
 ### Installation
 
@@ -139,19 +154,18 @@ uv sync --extra whisper
 
 ### Model Sizes
 
-Whisper offers different model sizes with trade-offs between speed and accuracy:
-
-| Model | Size  | Speed     | Accuracy | Recommended For |
-|-------|-------|-----------|----------|-----------------|
-| tiny  | 39MB  | Very fast | Basic    | Quick transcription, low VRAM |
-| base  | 140MB | Fast      | Good     | Default, balanced |
-| small | 466MB | Moderate  | Better   | High-quality transcription |
-| medium| 1.5GB | Slow      | Very good| Demanding accuracy requirements |
-| large | 2.9GB | Very slow | Excellent| Maximum accuracy needed |
+| Model | Size | Speed | Accuracy | Recommended For |
+|-------|------|-------|----------|-----------------|
+| tiny | 39MB | Very fast | Basic | Quick transcription, low VRAM |
+| base | 140MB | Fast | Good | Default, balanced |
+| small | 466MB | Moderate | Better | High-quality transcription |
+| medium | 1.5GB | Slow | Very good | Demanding accuracy requirements |
+| large | 2.9GB | Very slow | Excellent | Maximum accuracy needed |
+| large-v3 | 3.1GB | Very slow | Best | Latest, highest accuracy |
 
 Specify a model with `--model`:
 ```bash
-uv run python main.py video.mp4 --backend whisper --model large
+uv run python main.py video.mp4 --model large
 ```
 
 ## Desktop GUI (CustomTkinter)
@@ -186,7 +200,7 @@ Opens a native desktop window — no browser required.
 ### GUI Features
 
 - Browse local video/audio files or paste a YouTube URL
-- Select backend: **Whisper** (fast, CUDA 11/12), **OpenAI-Whisper** (CUDA 13.x), or **Azure**
+- Select backend: **OpenAI-Whisper** (local, GPU-accelerated) or **Azure** (cloud)
 - Choose Whisper model size and device (CPU or CUDA GPU)
 - Real-time progress display
 - Copyable transcription output with Save As dialog
@@ -204,6 +218,8 @@ Requires a local LLM (Ollama recommended):
 The LLM URL, API key, and model are configurable in the Q&A tab.
 Works with any OpenAI-compatible endpoint (OpenAI, LM Studio, etc.).
 
+For long transcripts, the Q&A tab automatically switches to RAG mode (sentence-transformers + ChromaDB) and uses GPU for embedding if CUDA is available.
+
 ## Project Structure
 
 ```
@@ -211,25 +227,67 @@ media-transcriber/
 ├── main.py              # CLI entry point; argument parsing and orchestration
 ├── app.py               # Desktop GUI entry point (CustomTkinter)
 ├── helper.py            # Audio processing, YouTube download, transcription backends
+├── qa.py                # Transcript Q&A (full-context and RAG modes)
+├── .env.example         # Environment variable template — copy to .env
 ├── pyproject.toml       # Project metadata and dependencies (uv)
 ├── uv.lock              # Locked dependency versions
 ├── README.md            # Project documentation
 ├── LICENSE              # MIT License
 └── tests/
     ├── conftest.py      # Pytest fixtures
-    ├── unit/            # Unit tests (~71 tests)
+    ├── unit/            # Unit tests
     └── integration/     # Integration tests (require Azure credentials)
 ```
 
 ## Running Tests
 
 ```bash
-uv run python -m pytest tests/
+uv run pytest tests/
 ```
 
 For verbose output:
 ```bash
-uv run python -m pytest tests/ -v
+uv run pytest tests/ -v
+```
+
+## GPU Acceleration (OpenAI-Whisper)
+
+The `openai-whisper` backend uses PyTorch and supports CUDA GPU acceleration.
+
+### Setup
+
+Install the whisper extra (includes openai-whisper + PyTorch with CUDA 12.4 wheels):
+
+```bash
+uv sync --extra whisper
+```
+
+By default, the CLI uses `--device cuda` and automatically falls back to CPU with a warning if CUDA is unavailable. Use `--device cpu` to always run on CPU.
+
+### Verify CUDA is available
+
+```bash
+uv run python -c "import torch; print('CUDA available:', torch.cuda.is_available(), '| CUDA version:', torch.version.cuda)"
+```
+
+### Install a different CUDA version of PyTorch
+
+The default install pulls PyTorch with CUDA 12.4 wheels. To use a different CUDA version:
+
+```bash
+# CUDA 12.1
+uv pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+# CPU-only
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+```
+
+### RTX 50-series / CUDA 13.x
+
+openai-whisper uses PyTorch, which ships CUDA support faster than most inference backends. Install the matching CUDA PyTorch wheels as above. If you still encounter issues, fall back to CPU:
+
+```bash
+uv run python main.py /path/to/video.mp4 --device cpu
 ```
 
 ## Notes
@@ -242,123 +300,12 @@ uv run python -m pytest tests/ -v
 
 ### Credential Behavior
 
-- **Azure backend:** The application requires both `AZURE_SPEECH_KEY` and `AZURE_AI_LOCATION` environment variables to be set at startup. If either is missing, the application exits with an error message.
-- **Whisper backend:** No credentials required. Works completely offline once the model is downloaded.
+- **Azure backend:** Requires both `AZURE_SPEECH_KEY` and `AZURE_AI_LOCATION` (via `.env` or shell environment). Missing either causes an immediate error with a clear message.
+- **OpenAI-Whisper backend:** No credentials required. Works completely offline once the model is downloaded.
 
 ### Temporary Files
 
 All temporary audio files and processing artifacts are automatically cleaned up after transcription completes, or on error. No manual cleanup is needed.
-
-## Troubleshooting
-
-### CUDA: `cublas64_12.dll` not found
-
-**Error:** `WARNING: CUDA requested but not available: Library cublas64_12.dll is not found or cannot be loaded`
-
-**What it means:** You requested GPU acceleration for Whisper transcription, but the system cannot find the cuBLAS library that ctranslate2 (the inference engine) needs at runtime. This typically means CUDA 12.x libraries are not available on your system PATH.
-
-**Resolution (try in order):**
-
-#### Option 1: Install CUDA libraries via pip (fastest, no system install needed)
-
-This approach installs self-contained CUDA runtime libraries into your Python environment. No system-wide CUDA Toolkit installation required.
-
-```bash
-pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
-```
-
-Or with `uv`:
-
-```bash
-uv pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
-```
-
-Then run your transcription again. ctranslate2 will auto-detect these libraries in your Python environment.
-
-#### Option 2: Verify CUDA Toolkit 12.x is installed and on PATH
-
-1. **Check if GPU is visible:**
-   ```bash
-   nvidia-smi
-   ```
-   Should list your GPU(s). If command not found, you may not have NVIDIA drivers installed.
-
-2. **Check CUDA Toolkit version:**
-   ```bash
-   nvcc --version
-   ```
-   Should show CUDA 12.x. If it shows CUDA 11.x or command not found, see the version mismatch section below.
-
-3. **If CUDA 12.x is installed but DLL still not found:**
-   - The CUDA binaries folder is not on your system PATH
-   - Add `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.x\bin` to your system PATH
-   - Restart your terminal after changing PATH
-   - Verify: `echo %PATH%` (Windows CMD) or `$env:PATH` (PowerShell) should include the CUDA bin directory
-
-#### Option 3: Resolve CUDA version mismatch
-
-Different versions of ctranslate2 require different CUDA versions:
-- **ctranslate2 2.x** requires CUDA 11.x
-- **ctranslate2 3.x+** requires CUDA 12.x
-
-**Check your ctranslate2 version:**
-```bash
-python -c "import ctranslate2; print(ctranslate2.__version__)"
-```
-
-**If you have CUDA 11.x but need CUDA 12.x:**
-- Option A: Upgrade to CUDA Toolkit 12.x (visit https://developer.nvidia.com/cuda-toolkit)
-- Option B: Use faster-whisper with an older version that bundles ctranslate2 2.x (not recommended; pin versions carefully)
-
-**If you have CUDA 12.x but ctranslate2 still fails:**
-- Try Option 1 (pip install nvidia-cublas-cu12) — often resolves library path issues even with system CUDA
-
-#### Option 4: Fall back to CPU (no GPU needed)
-
-GPU acceleration is optional. If you don't need GPU performance or can't get CUDA working:
-
-```bash
-uv run python main.py /path/to/video.mp4 --backend whisper --device cpu
-```
-
-Or in the GUI, select **Device: CPU** in Settings.
-
-**Note:** The warning message is non-fatal — ctranslate2 automatically falls back to CPU when it cannot initialize CUDA. Transcription will complete, just slower. A typical video takes 1–3 minutes per minute of audio on CPU (varies by model and hardware).
-
-### CUDA 13.x / Blackwell GPUs (RTX 50-series)
-
-If you have CUDA 13.x installed and faster-whisper fails with `cublas64_12.dll not found`:
-
-**Step 1: Try the pip CUDA shim fix**
-
-faster-whisper requires CUDA 12.x libraries. Installing the full `[whisper]` extra provides them automatically:
-
-```bash
-uv sync --extra whisper
-```
-
-This installs `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` into your Python environment — ctranslate2 finds them automatically without system-wide CUDA changes.
-
-**Step 2: If Step 1 doesn't resolve it — use the PyTorch backend**
-
-`openai-whisper` uses PyTorch which tracks new CUDA releases much faster:
-
-```bash
-uv pip install ".[whisper-pytorch]"
-# Then install CUDA-enabled PyTorch:
-pip install torch --index-url https://download.pytorch.org/whl/cu124
-```
-
-Run with:
-```bash
-uv run python main.py video.mp4 --backend openai-whisper --device cuda
-```
-
-**Note:** `openai-whisper` is 2–3× slower than `faster-whisper` on the same GPU. Once ctranslate2 ships CUDA 13.x support, you can switch back to `--backend whisper`.
-
-**Track ctranslate2 CUDA 13.x support:** https://github.com/OpenNMT/CTranslate2/issues/1933
-
----
 
 ## License
 

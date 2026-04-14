@@ -2,11 +2,13 @@ import os
 import threading
 import logging
 from tkinter import filedialog
+from dotenv import load_dotenv
 
 import customtkinter as ctk
 
 import helper
 
+load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 _AUDIO_FILE_TYPES = [

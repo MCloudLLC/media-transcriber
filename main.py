@@ -3,8 +3,10 @@ import sys
 import subprocess
 import logging
 import argparse
+from dotenv import load_dotenv
 import helper
 
+load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 

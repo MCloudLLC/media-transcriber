@@ -334,7 +334,22 @@ def transcribe_with_openai_whisper(audio_files: List[str], model_size: str = "ba
         try:
             logging.info(f"Transcribing file: {file}")
             result = model.transcribe(file, beam_size=5)
-            text = " ".join(s["text"].strip() for s in result["segments"])
+            segments = result.get("segments", []) if isinstance(result, dict) else []
+            segment_texts: List[str] = []
+            for segment in segments:
+                if isinstance(segment, dict):
+                    raw_text = segment.get("text")
+                    if isinstance(raw_text, str):
+                        cleaned = raw_text.strip()
+                        if cleaned:
+                            segment_texts.append(cleaned)
+
+            text = " ".join(segment_texts)
+            if not text and isinstance(result, dict):
+                fallback_text = result.get("text")
+                if isinstance(fallback_text, str):
+                    text = fallback_text.strip()
+
             txt_array.append(text)
         except Exception as e:
             logging.error(f"Error transcribing file {file}: {e}")

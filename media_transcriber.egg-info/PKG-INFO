@@ -9,6 +9,7 @@ License-File: LICENSE
 Requires-Dist: pydub==0.25.1
 Requires-Dist: SpeechRecognition==3.14.2
 Requires-Dist: yt-dlp>=2024.1.0
+Requires-Dist: python-dotenv>=1.0.0
 Requires-Dist: audioop-lts==0.2.1; python_version >= "3.13"
 Provides-Extra: whisper
 Requires-Dist: openai-whisper>=20231117; extra == "whisper"

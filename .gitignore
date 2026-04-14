@@ -13,6 +13,9 @@ venv/
 .venv/
 .env/
 
+# Local environment variables (secrets — never commit)
+.env
+
 # System files
 .DS_Store
 Thumbs.db
