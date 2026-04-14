@@ -565,6 +565,3 @@ def transcribe_pipeline(
             clean_up_temp_files(audio_files)
         if youtube_temp_dir and os.path.exists(youtube_temp_dir):
             shutil.rmtree(youtube_temp_dir, ignore_errors=True)
-
-    logging.info("Transcription complete.")
-    return txt_array

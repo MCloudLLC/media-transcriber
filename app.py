@@ -23,6 +23,8 @@ class App:
         self.root.title("Media Transcriber")
         self.root.minsize(900, 650)
         self._selected_file: str | None = None
+        self._qa = None
+        self._current_transcript: str = ""
         self._setup_ui()
 
     def _setup_ui(self):
@@ -32,8 +34,7 @@ class App:
         tabview = ctk.CTkTabview(self.root)
         tabview.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         tabview.add("Transcribe")
-        # Phase 2: Q&A tab placeholder
-        # tabview.add("Q&A")
+        tabview.add("Q&A")
 
         tab = tabview.tab("Transcribe")
         tab.grid_columnconfigure(0, weight=35)
@@ -42,6 +43,8 @@ class App:
 
         self._build_left_panel(tab)
         self._build_right_panel(tab)
+
+        self._build_qa_tab(tabview.tab("Q&A"))
 
     def _build_left_panel(self, parent):
         left = ctk.CTkFrame(parent)
@@ -282,6 +285,14 @@ class App:
         if text:
             self._transcript_box.insert("1.0", text)
         self._transcript_box.configure(state="disabled")
+        self._current_transcript = text
+        self._qa = None
+        if text:
+            self._ask_btn.configure(state="normal")
+            self._qa_status_label.configure(text="Ready")
+        else:
+            self._ask_btn.configure(state="disabled")
+            self._qa_status_label.configure(text="Transcribe a file first")
 
     def _copy_transcript(self):
         text = self._transcript_box.get("1.0", "end").strip()
@@ -303,6 +314,140 @@ class App:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
             self._status_label.configure(text=f"Saved to {os.path.basename(path)}")
+
+    def _build_qa_tab(self, parent):
+        parent.grid_columnconfigure(0, weight=35)
+        parent.grid_columnconfigure(1, weight=65)
+        parent.grid_rowconfigure(0, weight=1)
+
+        # Left panel — config + input
+        left = ctk.CTkFrame(parent)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=0)
+        left.grid_columnconfigure(0, weight=1)
+
+        row = 0
+        ctk.CTkLabel(left, text="LLM URL:", anchor="w").grid(
+            row=row, column=0, sticky="ew", padx=10, pady=(10, 2)
+        )
+        row += 1
+        self._llm_url_entry = ctk.CTkEntry(left, placeholder_text="http://localhost:11434/v1")
+        self._llm_url_entry.insert(0, "http://localhost:11434/v1")
+        self._llm_url_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        row += 1
+
+        ctk.CTkLabel(left, text="API Key:", anchor="w").grid(
+            row=row, column=0, sticky="ew", padx=10, pady=(0, 2)
+        )
+        row += 1
+        self._llm_key_entry = ctk.CTkEntry(
+            left, show="*", placeholder_text="Leave blank for Ollama"
+        )
+        self._llm_key_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        row += 1
+
+        ctk.CTkLabel(left, text="Model:", anchor="w").grid(
+            row=row, column=0, sticky="ew", padx=10, pady=(0, 2)
+        )
+        row += 1
+        self._llm_model_entry = ctk.CTkEntry(left, placeholder_text="llama3")
+        self._llm_model_entry.insert(0, "llama3")
+        self._llm_model_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
+        row += 1
+
+        # Separator via padding
+        ctk.CTkFrame(left, height=2, fg_color="gray50").grid(
+            row=row, column=0, sticky="ew", padx=10, pady=(0, 10)
+        )
+        row += 1
+
+        ctk.CTkLabel(left, text="Ask a question:", anchor="w").grid(
+            row=row, column=0, sticky="ew", padx=10, pady=(0, 2)
+        )
+        row += 1
+        self._question_box = ctk.CTkTextbox(left, height=80, wrap="word")
+        self._question_box.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        row += 1
+
+        self._ask_btn = ctk.CTkButton(left, text="Ask", command=self._start_ask, state="disabled")
+        self._ask_btn.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 4))
+        row += 1
+
+        ctk.CTkButton(left, text="Clear Chat", command=self._clear_chat).grid(
+            row=row, column=0, sticky="ew", padx=10, pady=(0, 6)
+        )
+        row += 1
+
+        self._qa_status_label = ctk.CTkLabel(
+            left, text="Transcribe a file first", anchor="w", wraplength=220
+        )
+        self._qa_status_label.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
+
+        # Right panel — chat history
+        right = ctk.CTkFrame(parent)
+        right.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=0)
+        right.grid_columnconfigure(0, weight=1)
+        right.grid_rowconfigure(0, weight=1)
+
+        self._chat_box = ctk.CTkTextbox(right, state="disabled", wrap="word")
+        self._chat_box.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+    def _start_ask(self):
+        question = self._question_box.get("1.0", "end").strip()
+        if not question:
+            self._qa_status_label.configure(text="Please enter a question.")
+            return
+        self._ask_btn.configure(state="disabled")
+        self._qa_status_label.configure(text="Thinking...")
+        threading.Thread(target=self._run_ask, args=(question,), daemon=True).start()
+
+    def _run_ask(self, question: str):
+        try:
+            if self._qa is None:
+                try:
+                    from qa import TranscriptQA  # noqa: PLC0415
+                except ImportError:
+                    self.root.after(
+                        0,
+                        lambda: self._qa_status_label.configure(
+                            text="❌ Q&A requires [qa] extra: uv sync --extra qa"
+                        ),
+                    )
+                    return
+                llm_url = self._llm_url_entry.get().strip() or "http://localhost:11434/v1"
+                api_key = (
+                    os.environ.get("OPENAI_API_KEY")
+                    or self._llm_key_entry.get().strip()
+                    or None
+                )
+                model = self._llm_model_entry.get().strip() or "llama3"
+                self._qa = TranscriptQA(
+                    transcript_text=self._current_transcript,
+                    llm_url=llm_url,
+                    api_key=api_key,
+                    model=model,
+                )
+            answer = self._qa.ask(question)
+            entry = f"You: {question}\n\nAssistant: {answer}\n\n{'─' * 40}\n\n"
+            self.root.after(0, lambda e=entry: self._append_chat(e))
+            self.root.after(0, lambda: self._qa_status_label.configure(text="Ready"))
+        except Exception as e:
+            msg = f"❌ Error: {e}"
+            self.root.after(0, lambda m=msg: self._qa_status_label.configure(text=m))
+        finally:
+            self.root.after(0, lambda: self._ask_btn.configure(state="normal"))
+
+    def _append_chat(self, text: str):
+        self._chat_box.configure(state="normal")
+        self._chat_box.insert("end", text)
+        self._chat_box.see("end")
+        self._chat_box.configure(state="disabled")
+
+    def _clear_chat(self):
+        self._chat_box.configure(state="normal")
+        self._chat_box.delete("1.0", "end")
+        self._chat_box.configure(state="disabled")
+        self._qa = None
+        self._qa_status_label.configure(text="Ready")
 
     def launch(self):
         self.root.mainloop()

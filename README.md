@@ -191,6 +191,19 @@ Opens a native desktop window — no browser required.
 - Real-time progress display
 - Copyable transcription output with Save As dialog
 
+### Q&A (Ask questions about your transcript)
+
+After transcribing, switch to the **Q&A** tab.
+
+Requires a local LLM (Ollama recommended):
+1. `uv sync --extra qa`
+2. Install Ollama: https://ollama.ai
+3. `ollama pull llama3`
+4. Transcribe a file, then ask questions in the Q&A tab
+
+The LLM URL, API key, and model are configurable in the Q&A tab.
+Works with any OpenAI-compatible endpoint (OpenAI, LM Studio, etc.).
+
 ## Project Structure
 
 ```
