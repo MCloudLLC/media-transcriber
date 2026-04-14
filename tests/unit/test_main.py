@@ -43,7 +43,7 @@ class TestMain:
         """Should call clean_up_temp_files in finally when transcription raises."""
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.setenv("AZURE_AI_LOCATION", "loc")
-        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4"])
+        monkeypatch.setattr(sys, "argv", ["main.py", "test.mp4", "--backend", "azure"])
         mock_cleanup = MagicMock()
         with patch("helper.check_file_exists", return_value=True), \
              patch("helper.get_audio_channel", return_value=MagicMock()), \

@@ -315,25 +315,29 @@ def download_youtube_audio(url: str) -> str:
         raise
 
 
-def transcribe_with_openai_whisper(audio_files: List[str], model_size: str = "base", device: str = "cpu") -> List[str]:
+def transcribe_with_openai_whisper(audio_files: List[str], model_size: str = "turbo", device: str = "cpu") -> List[str]:
     """
-    Transcribes audio segments using openai-whisper (PyTorch backend).
+    Transcribes audio files using openai-whisper (PyTorch backend).
 
     Compatible with CUDA 13.x and all CUDA versions supported by PyTorch.
-    2-3x slower than faster-whisper on the same hardware, but works without
-    ctranslate2's CUDA version constraints.
+    Whisper handles long audio internally via a sliding 30-second window, so
+    audio_files should ideally contain a single unsegmented file per source.
+
+    Recommended model: 'turbo' — an optimised large-v3 variant with ~8x speed
+    relative to large and minimal accuracy loss (requires ~6 GB VRAM).
 
     Args:
         audio_files (list): List of audio file paths to transcribe.
-        model_size (str): Whisper model size: tiny, base, small, medium, large (default: base).
+        model_size (str): Whisper model size: tiny, base, small, medium, large,
+            large-v2, large-v3, turbo (default: turbo).
         device (str): Device for inference: 'cpu' or 'cuda' (default: cpu).
 
     Returns:
-        list: List of transcribed text segments.
+        list: List of transcribed text strings, one per input file.
 
     Raises:
         ImportError: If openai-whisper is not installed.
-        RuntimeError: If all segments fail to transcribe.
+        RuntimeError: If all files fail to transcribe.
     """
     try:
         import whisper
@@ -353,43 +357,33 @@ def transcribe_with_openai_whisper(audio_files: List[str], model_size: str = "ba
         )
         device = "cpu"
 
-    logging.info(f"Loading openai-whisper model: {model_size} (device={device})")
+    # fp16 halves VRAM usage and speeds up inference on CUDA; always False on CPU
+    fp16 = device == "cuda"
+
+    logging.info(f"Loading openai-whisper model: {model_size} (device={device}, fp16={fp16})")
     model = whisper.load_model(model_size, device=device)
 
     txt_array = []
     failed_files = []
-    logging.info("Transcribing WAV file(s) with openai-whisper.")
+    logging.info("Transcribing with openai-whisper.")
 
     try:
         for file in audio_files:
             try:
                 logging.info(f"Transcribing file: {file}")
-                result = model.transcribe(file, beam_size=5)
-                segments = result.get("segments", []) if isinstance(result, dict) else []
-                segment_texts: List[str] = []
-                for segment in segments:
-                    if isinstance(segment, dict):
-                        raw_text = segment.get("text")
-                        if isinstance(raw_text, str):
-                            cleaned = raw_text.strip()
-                            if cleaned:
-                                segment_texts.append(cleaned)
-
-                text = " ".join(segment_texts)
-                if not text and isinstance(result, dict):
-                    fallback_text = result.get("text")
-                    if isinstance(fallback_text, str):
-                        text = fallback_text.strip()
-
+                # verbose=False suppresses per-segment console output;
+                # result["text"] is the canonical full transcription string.
+                result = model.transcribe(file, fp16=fp16, verbose=False)
+                text = result["text"].strip() if isinstance(result, dict) else ""
                 txt_array.append(text)
             except Exception as e:
                 logging.error(f"Error transcribing file {file}: {e}")
                 failed_files.append(file)
 
         if failed_files and len(failed_files) == len(audio_files):
-            raise RuntimeError(f"Failed to transcribe all {len(audio_files)} audio segments.")
+            raise RuntimeError(f"Failed to transcribe all {len(audio_files)} audio files.")
         if failed_files:
-            logging.warning(f"Partial transcription: {len(failed_files)} of {len(audio_files)} segments failed.")
+            logging.warning(f"Partial transcription: {len(failed_files)} of {len(audio_files)} files failed.")
 
         logging.info("Transcription complete.")
         return txt_array
@@ -476,7 +470,17 @@ def transcribe_pipeline(
         audio = get_audio_channel(input_file)
         if audio is None:
             raise RuntimeError("Failed to process the audio channel.")
-        audio_files = load_audio_segments(audio)
+
+        if backend == "openai-whisper":
+            # Whisper's transcribe() handles long audio internally via a sliding
+            # 30-second window — pre-segmentation is redundant and can hurt
+            # accuracy by cutting context at arbitrary boundaries.
+            tmp_dir = tempfile.mkdtemp()
+            tmp_wav = os.path.join(tmp_dir, f"{TMP_FILE_NAME}.wav")
+            audio.export(tmp_wav, format="wav")
+            audio_files = [tmp_wav]
+        else:
+            audio_files = load_audio_segments(audio)
 
         # Step 4: Transcribe
         _progress(4, total_steps, f"Transcribing with {backend} backend...")

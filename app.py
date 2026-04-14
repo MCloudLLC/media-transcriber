@@ -1,6 +1,7 @@
 import os
 import threading
 import logging
+import tkinter as tk
 from tkinter import filedialog
 from dotenv import load_dotenv
 
@@ -27,6 +28,8 @@ class App:
         self._selected_file: str | None = None
         self._qa = None
         self._current_transcript: str = ""
+        self._transcriptions_dir = os.path.join(os.getcwd(), "transcriptions")
+        os.makedirs(self._transcriptions_dir, exist_ok=True)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -75,6 +78,7 @@ class App:
             left, placeholder_text="https://www.youtube.com/watch?v=..."
         )
         self._url_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self._bind_context_menu(self._url_entry)
         row += 1
 
         # Backend
@@ -84,10 +88,10 @@ class App:
         row += 1
         self._backend_seg = ctk.CTkSegmentedButton(
             left,
-            values=["openai-whisper", "azure"],
+            values=["Local", "Azure"],
             command=self._on_backend_change,
         )
-        self._backend_seg.set("openai-whisper")
+        self._backend_seg.set("Local")
         self._backend_seg.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
         row += 1
 
@@ -96,9 +100,9 @@ class App:
         self._model_label.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 2))
         row += 1
         self._model_menu = ctk.CTkOptionMenu(
-            left, values=["tiny", "base", "small", "medium", "large", "large-v3"]
+            left, values=["tiny", "base", "small", "medium", "large", "large-v2", "large-v3", "turbo"]
         )
-        self._model_menu.set("base")
+        self._model_menu.set("turbo")
         self._model_menu.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
         row += 1
 
@@ -119,6 +123,7 @@ class App:
             left, placeholder_text="Leave blank to use env var", show="*"
         )
         self._azure_key_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self._bind_context_menu(self._azure_key_entry)
         row += 1
 
         # Azure Region (only shown when backend == "azure")
@@ -127,6 +132,7 @@ class App:
         row += 1
         self._azure_region_entry = ctk.CTkEntry(left, placeholder_text="e.g. eastus")
         self._azure_region_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self._bind_context_menu(self._azure_region_entry)
         row += 1
 
         # Transcribe button (full width, disabled during transcription)
@@ -145,7 +151,7 @@ class App:
             self._azure_region_label, self._azure_region_entry,
         ]
 
-        # Azure widgets start hidden (default backend is "whisper")
+        # Azure widgets start hidden (default backend is "Local")
         for w in self._azure_widgets:
             w.grid_remove()
 
@@ -160,6 +166,7 @@ class App:
         self._transcript_box.grid(
             row=0, column=0, sticky="nsew", padx=10, pady=(10, 5)
         )
+        self._bind_context_menu(self._transcript_box, readonly=True)
 
         # Copy + Save As buttons
         btn_frame = ctk.CTkFrame(right, fg_color="transparent")
@@ -184,7 +191,7 @@ class App:
         self._status_label.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 10))
 
     def _on_backend_change(self, value: str):
-        is_azure = value == "azure"
+        is_azure = value == "Azure"
         if is_azure:
             for w in self._whisper_widgets:
                 w.grid_remove()
@@ -208,7 +215,6 @@ class App:
     def _start_transcription(self):
         if self._selected_file:
             input_source = self._selected_file
-            output_dir = os.path.dirname(self._selected_file)
         else:
             url = self._url_entry.get().strip()
             if not url:
@@ -217,9 +223,10 @@ class App:
                 )
                 return
             input_source = url
-            output_dir = None
 
-        backend = self._backend_seg.get()
+        output_dir = self._transcriptions_dir
+
+        backend = "openai-whisper" if self._backend_seg.get() == "Local" else "azure"
         model_size = self._model_menu.get()
         device = self._device_seg.get()
 
@@ -364,6 +371,7 @@ class App:
         self._llm_url_entry = ctk.CTkEntry(left, placeholder_text="http://localhost:11434/v1")
         self._llm_url_entry.insert(0, "http://localhost:11434/v1")
         self._llm_url_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        self._bind_context_menu(self._llm_url_entry)
         row += 1
 
         ctk.CTkLabel(left, text="API Key:", anchor="w").grid(
@@ -374,15 +382,17 @@ class App:
             left, show="*", placeholder_text="Leave blank for Ollama"
         )
         self._llm_key_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        self._bind_context_menu(self._llm_key_entry)
         row += 1
 
         ctk.CTkLabel(left, text="Model:", anchor="w").grid(
             row=row, column=0, sticky="ew", padx=10, pady=(0, 2)
         )
         row += 1
-        self._llm_model_entry = ctk.CTkEntry(left, placeholder_text="llama3")
-        self._llm_model_entry.insert(0, "llama3")
+        self._llm_model_entry = ctk.CTkEntry(left, placeholder_text="gemma4:26b")
+        self._llm_model_entry.insert(0, "gemma4:26b")
         self._llm_model_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self._bind_context_menu(self._llm_model_entry)
         row += 1
 
         # Separator via padding
@@ -397,6 +407,7 @@ class App:
         row += 1
         self._question_box = ctk.CTkTextbox(left, height=80, wrap="word")
         self._question_box.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        self._bind_context_menu(self._question_box)
         row += 1
 
         self._ask_btn = ctk.CTkButton(left, text="Ask", command=self._start_ask, state="disabled")
@@ -421,6 +432,7 @@ class App:
 
         self._chat_box = ctk.CTkTextbox(right, state="disabled", wrap="word")
         self._chat_box.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self._bind_context_menu(self._chat_box, readonly=True)
 
     def _start_ask(self):
         question = self._question_box.get("1.0", "end").strip()
@@ -450,7 +462,7 @@ class App:
                     or self._llm_key_entry.get().strip()
                     or None
                 )
-                model = self._llm_model_entry.get().strip() or "llama3"
+                model = self._llm_model_entry.get().strip() or "gemma4:26b"
                 self._qa = TranscriptQA(
                     transcript_text=self._current_transcript,
                     llm_url=llm_url,
@@ -500,6 +512,68 @@ class App:
             self._qa_status_label.configure(text=f"Loaded: {os.path.basename(path)}")
         except Exception as e:
             self._qa_status_label.configure(text=f"❌ Error loading file: {e}")
+
+    def _bind_context_menu(self, widget, readonly: bool = False) -> None:
+        """Attach a right-click Cut/Copy/Paste/Select-All menu to any CTk text widget.
+
+        Binds to the underlying tk widget directly (CTkTextbox._textbox or
+        CTkEntry._entry) so the event is captured reliably even when the CTk
+        wrapper intercepts mouse events.
+        """
+        inner = getattr(widget, "_textbox", None) or getattr(widget, "_entry", None) or widget
+        is_text = hasattr(inner, "tag_add")  # tk.Text vs tk.Entry
+
+        def _get_selection() -> str:
+            try:
+                return inner.get("sel.first", "sel.last") if is_text else inner.selection_get()
+            except tk.TclError:
+                return ""
+
+        def _copy():
+            text = _get_selection()
+            if text:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+
+        def _paste():
+            try:
+                text = self.root.clipboard_get()
+                inner.insert("insert", text)
+            except Exception:
+                pass
+
+        def _cut():
+            _copy()
+            try:
+                if is_text:
+                    inner.delete("sel.first", "sel.last")
+                else:
+                    inner.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            except tk.TclError:
+                pass
+
+        def _select_all():
+            if is_text:
+                inner.tag_add("sel", "1.0", "end")
+            else:
+                inner.select_range(0, tk.END)
+                inner.icursor(tk.END)
+
+        def _show_menu(event):
+            menu = tk.Menu(self.root, tearoff=0)
+            if not readonly:
+                menu.add_command(label="Cut", command=_cut)
+            menu.add_command(label="Copy", command=_copy)
+            if not readonly:
+                menu.add_command(label="Paste", command=_paste)
+            menu.add_separator()
+            menu.add_command(label="Select All", command=_select_all)
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+
+        inner.bind("<Button-3>", _show_menu)
 
     def launch(self):
         self.root.mainloop()

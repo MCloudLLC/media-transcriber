@@ -10,6 +10,7 @@ __pycache__/
 
 # Generated transcription output files
 *_transcription.txt
+transcriptions/
 
 # Build / packaging artifacts
 *.egg-info/

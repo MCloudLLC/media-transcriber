@@ -30,8 +30,8 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default="base",
-        help="Whisper model size: tiny, base, small, medium, large (default: base)",
+        default="turbo",
+        help="Whisper model size: tiny, base, small, medium, large, large-v2, large-v3, turbo (default: turbo)",
     )
     parser.add_argument(
         "--device",
