@@ -104,3 +104,52 @@
 - None — tests written against expected post-fix behavior per charter
 - All tests will initially fail until Ripley's refactoring is complete
 - Tests serve as specification for correct behavior
+
+### 2026-04-13: GUI & Q&A Feature Test Planning — 44+ scenarios cataloged
+
+**New Features Requested:** GUI wrapper for transcription + Q&A/knowledge source against transcripts
+
+**Test scenario catalog written to:** `.squad/decisions/inbox/hudson-gui-qa-test-scenarios.md`
+
+**GUI Transcription Test Strategy:**
+- 24 test scenarios identified (8 happy-path, 8 error, 5 UX, 3 integration)
+- **Key scenarios:** File upload, progress tracking, cancellation, backend selection (Azure/Whisper), error handling (missing ffmpeg, invalid file, API failures)
+- **Testing approach:** Hybrid strategy (unit tests with mocks, integration tests with real helper.py, UI automation for workflows)
+- **Library recommendation:** pytest-qt (if PyQt desktop) or Playwright (if web-based GUI)
+- **Coverage goal:** 80% from unit tests, 95% user flow coverage from integration+UI tests
+
+**Q&A Knowledge Source Test Strategy:**
+- 20 test scenarios identified (4 happy-path, 7 edge cases, 4 quality gates, 5 error)
+- **Key scenarios:** Load transcript & ask questions, multi-turn conversation, semantic search, empty/long transcripts, LLM failures
+- **Quality gates:** Factual accuracy benchmark (≥85% correct), source citation validation (95%+ accurate), relevance scoring (≥4.0/5.0)
+- **Edge cases:** No relevant answer (prevent hallucination), very long transcripts (chunking strategy), transcription errors (robustness)
+- **Testing challenges:** Need to mock LLM API (Azure OpenAI) to avoid cost/latency in CI — abstract LLM interface required
+
+**Testability Requirements Flagged for Ripley:**
+1. **Dependency injection:** GUI controller must take `helper` module as parameter (not import directly) for easy mocking
+2. **Progress callbacks:** Add optional `progress_callback` parameter to long-running `helper.py` functions (load_audio_segments, transcribe_audio_segments)
+3. **Controller/Presenter pattern:** Separate GUI widgets from business logic (create `TranscriptionController` class)
+4. **Abstract LLM interface:** Create `LLMProvider` abstract base class with `MockLLMProvider` for tests
+5. **Thread safety:** Use `queue.Queue` or `threading.Lock` for async GUI state management (testable with threading unit tests)
+6. **Config validation:** Validate all user inputs (Azure keys, file paths) before processing — create `ConfigValidator` class
+
+**Critical Blockers Before Test Implementation:**
+- GUI framework decision needed (PyQt vs Tkinter vs web-based) — flagged for Dallas
+- Q&A architecture decision needed (RAG with embeddings vs full-context LLM) — flagged for Dallas
+- Scope clarification needed (batch transcription in MVP? speaker diarization?) — flagged for Dallas
+
+**Recommended Test Library Stack:**
+```
+Core:        pytest 8.3.5
+Mocking:     pytest-mock 3.14.0
+Coverage:    pytest-cov 6.1.0
+GUI:         pytest-qt 5.3.0 (desktop) OR playwright 1.40.0 (web)
+LLM Mocking: pytest-vcr 1.0.2 (record/replay API calls)
+Performance: pytest-benchmark 4.0.0 (Q&A latency tests)
+```
+
+**Test Development Timeline:** 15-20 days (3-4 weeks) after architecture finalized
+
+**Key Insight:** Existing unit tests for `helper.py` remain valid — GUI just adds new calling path. Only CLI-specific tests in `test_main.py` need refactoring into `test_cli.py` (if keeping CLI option) vs `test_gui_controller.py` (new).
+
+**Status:** Catalog ready for Dallas architecture review. Cannot write code until framework and Q&A approach decided.
