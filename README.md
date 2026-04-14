@@ -210,7 +210,7 @@ Opens a native desktop window — no browser required.
 After transcribing, switch to the **Q&A** tab.
 
 Requires a local LLM (Ollama recommended):
-1. `uv sync --extra qa`
+1. `uv sync --extra gui`
 2. Install Ollama: https://ollama.ai
 3. `ollama pull llama3`
 4. Transcribe a file, then ask questions in the Q&A tab

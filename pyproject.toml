@@ -20,14 +20,12 @@ whisper = [
 ]
 gui = [
     "customtkinter>=5.2.0",
-]
-qa = [
     "chromadb>=0.5.0",
     "sentence-transformers>=3.0.0",
     "openai>=1.0.0",
 ]
 all = [
-    "media-transcriber[whisper,gui,qa]",
+    "media-transcriber[whisper,gui]",
 ]
 
 [project.scripts]

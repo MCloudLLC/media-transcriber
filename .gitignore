@@ -8,6 +8,9 @@ __pycache__/
 *.log
 *.wav
 
+# Generated transcription output files
+*_transcription.txt
+
 # Virtual environment
 venv/
 .venv/

@@ -7,12 +7,10 @@ python-dotenv>=1.0.0
 audioop-lts==0.2.1
 
 [all]
-media-transcriber[gui,qa,whisper]
+media-transcriber[gui,whisper]
 
 [gui]
 customtkinter>=5.2.0
-
-[qa]
 chromadb>=0.5.0
 sentence-transformers>=3.0.0
 openai>=1.0.0
