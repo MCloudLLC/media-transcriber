@@ -44,6 +44,21 @@ def main():
         default=None,
         help="Output directory for the transcription file (default: current working directory)",
     )
+    parser.add_argument(
+        "--diarize",
+        action="store_true",
+        help=(
+            "Enable speaker diarization (separate speakers) via pyannote.audio. "
+            "Works for both backends. Requires the [diarize] extra and a HuggingFace token "
+            "(--hf-token or HF_TOKEN env var). Produces a speaker-labeled, timestamped "
+            "transcript plus a structured JSON sidecar for summarization."
+        ),
+    )
+    parser.add_argument(
+        "--hf-token",
+        default=None,
+        help="HuggingFace access token for diarization (falls back to the HF_TOKEN env var).",
+    )
     args = parser.parse_args()
 
     azure_speech_key = None
@@ -55,6 +70,16 @@ def main():
             logging.error("Missing required environment variables: AZURE_SPEECH_KEY and/or AZURE_AI_LOCATION")
             sys.exit(1)
 
+    hf_token = None
+    if args.diarize:
+        hf_token = args.hf_token or os.environ.get("HF_TOKEN")
+        if not hf_token:
+            logging.error(
+                "Diarization requires a HuggingFace token. Pass --hf-token or set HF_TOKEN. "
+                "Accept the license at https://hf.co/pyannote/speaker-diarization-3.1"
+            )
+            sys.exit(1)
+
     try:
         _, transcription_file = helper.transcribe_pipeline(
             input_source=args.input,
@@ -64,6 +89,8 @@ def main():
             azure_speech_key=azure_speech_key,
             azure_ai_location=azure_ai_location,
             output_dir=args.output,
+            diarize=args.diarize,
+            hf_token=hf_token,
         )
     except (ValueError, FileNotFoundError, RuntimeError) as e:
         logging.error(str(e))

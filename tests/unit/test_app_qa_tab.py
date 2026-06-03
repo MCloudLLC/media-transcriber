@@ -259,3 +259,61 @@ def test_error_handling_shows_in_status(mock_gui_dependencies, monkeypatch: pyte
     call_args = [call[1] for call in mock_status.configure.call_args_list]
     error_messages = [args.get("text", "") for args in call_args if "text" in args]
     assert any("Error" in msg or "error" in msg for msg in error_messages)
+
+
+@pytest.mark.unit
+def test_tokenize_inline_bold_italic_code(mock_gui_dependencies):
+    """Inline markdown should split into styled runs for bold, italic and code."""
+    from app import tokenize_inline
+
+    runs = tokenize_inline("a **b** c `d` e *f*")
+    assert runs == [
+        ("a ", ""),
+        ("b", "bold"),
+        (" c ", ""),
+        ("d", "code"),
+        (" e ", ""),
+        ("f", "italic"),
+    ]
+
+
+@pytest.mark.unit
+def test_tokenize_inline_preserves_underscores(mock_gui_dependencies):
+    """Underscores must not be treated as emphasis (e.g. identifiers like SPEAKER_01)."""
+    from app import tokenize_inline
+
+    assert tokenize_inline("SPEAKER_01 said hi") == [("SPEAKER_01 said hi", "")]
+
+
+@pytest.mark.unit
+def test_parse_markdown_block_headings(mock_gui_dependencies):
+    """ATX headings map to h1/h2/h3 (capped at h3)."""
+    from app import parse_markdown_block
+
+    assert parse_markdown_block("# Title") == ("h1", "", "Title")
+    assert parse_markdown_block("## Sub") == ("h2", "", "Sub")
+    assert parse_markdown_block("#### Deep") == ("h3", "", "Deep")
+
+
+@pytest.mark.unit
+def test_parse_markdown_block_bullets_and_nesting(mock_gui_dependencies):
+    """Bullets and numbered items become bullet blocks with indented glyph prefixes."""
+    from app import parse_markdown_block
+
+    kind, prefix, content = parse_markdown_block("*   Top level")
+    assert kind == "bullet" and content == "Top level" and prefix.endswith("\u2022  ")
+    assert not prefix.startswith(" ")
+
+    kind, prefix, content = parse_markdown_block("    *   Nested")
+    assert kind == "bullet" and content == "Nested" and prefix.startswith("    ")
+
+    kind, prefix, content = parse_markdown_block("2. Second")
+    assert kind == "bullet" and content == "Second" and prefix.endswith("2.  ")
+
+
+@pytest.mark.unit
+def test_parse_markdown_block_paragraph(mock_gui_dependencies):
+    """Plain text is a paragraph block with no prefix."""
+    from app import parse_markdown_block
+
+    assert parse_markdown_block("Just a sentence.") == ("paragraph", "", "Just a sentence.")

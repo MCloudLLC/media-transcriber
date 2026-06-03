@@ -24,8 +24,13 @@ gui = [
     "sentence-transformers>=3.0.0",
     "openai>=1.0.0",
 ]
+diarize = [
+    "pyannote.audio>=3.1,<4",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+]
 all = [
-    "media-transcriber[whisper,gui]",
+    "media-transcriber[whisper,gui,diarize]",
 ]
 
 [project.scripts]
@@ -65,3 +70,4 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cuda" }
+torchaudio = { index = "pytorch-cuda" }

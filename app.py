@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 import logging
 import tkinter as tk
@@ -16,6 +17,56 @@ _AUDIO_FILE_TYPES = [
     ("Media files", "*.mp4 *.avi *.mkv *.mov *.webm *.mp3 *.wav *.flac *.ogg *.aac *.m4a"),
     ("All files", "*.*"),
 ]
+
+# Inline markdown: **bold**, `code`, *italic* (underscores are intentionally NOT treated
+# as emphasis to avoid mangling identifiers like file_download or speaker_01).
+_INLINE_MD_RE = re.compile(r"\*\*(.+?)\*\*|`(.+?)`|\*(.+?)\*")
+
+
+def tokenize_inline(text):
+    """Split a line of inline markdown into (text, style) runs.
+
+    style is one of "", "bold", "italic", "code". Always returns at least one run.
+    """
+    runs = []
+    pos = 0
+    for m in _INLINE_MD_RE.finditer(text):
+        if m.start() > pos:
+            runs.append((text[pos:m.start()], ""))
+        if m.group(1) is not None:
+            runs.append((m.group(1), "bold"))
+        elif m.group(2) is not None:
+            runs.append((m.group(2), "code"))
+        else:
+            runs.append((m.group(3), "italic"))
+        pos = m.end()
+    if pos < len(text):
+        runs.append((text[pos:], ""))
+    if not runs:
+        runs.append(("", ""))
+    return runs
+
+
+def parse_markdown_block(line):
+    """Classify a single markdown line.
+
+    Returns (kind, prefix, content) where kind is one of
+    "h1", "h2", "h3", "bullet", "paragraph". ``prefix`` is the literal text to render
+    before the (still inline-markdown) ``content`` (e.g. a bullet glyph with indentation).
+    """
+    m = re.match(r"^(#{1,6})\s+(.*)$", line)
+    if m:
+        level = min(len(m.group(1)), 3)
+        return (f"h{level}", "", m.group(2))
+    m = re.match(r"^(\s*)[\*\-\+]\s+(.*)$", line)
+    if m:
+        depth = len(m.group(1)) // 4
+        return ("bullet", "    " * depth + "\u2022  ", m.group(2))
+    m = re.match(r"^(\s*)(\d+)\.\s+(.*)$", line)
+    if m:
+        depth = len(m.group(1)) // 4
+        return ("bullet", "    " * depth + f"{m.group(2)}.  ", m.group(3))
+    return ("paragraph", "", line)
 
 
 class App:
@@ -115,6 +166,27 @@ class App:
         self._device_seg.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
         row += 1
 
+        # Diarization (separate speakers) — applies to both backends
+        self._diarize_var = ctk.BooleanVar(value=False)
+        self._diarize_check = ctk.CTkCheckBox(
+            left,
+            text="Diarize (separate speakers)",
+            variable=self._diarize_var,
+            command=self._on_diarize_toggle,
+        )
+        self._diarize_check.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 6))
+        row += 1
+
+        self._hf_token_label = ctk.CTkLabel(left, text="HuggingFace Token:", anchor="w")
+        self._hf_token_label.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 2))
+        row += 1
+        self._hf_token_entry = ctk.CTkEntry(
+            left, placeholder_text="Leave blank to use HF_TOKEN env var", show="*"
+        )
+        self._hf_token_entry.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self._bind_context_menu(self._hf_token_entry)
+        row += 1
+
         # Azure Speech Key (only shown when backend == "azure")
         self._azure_key_label = ctk.CTkLabel(left, text="Azure Speech Key:", anchor="w")
         self._azure_key_label.grid(row=row, column=0, sticky="ew", padx=10, pady=(0, 2))
@@ -154,6 +226,19 @@ class App:
         # Azure widgets start hidden (default backend is "Local")
         for w in self._azure_widgets:
             w.grid_remove()
+
+        # HF token field starts hidden (shown only when diarization is enabled)
+        self._diarize_widgets = [self._hf_token_label, self._hf_token_entry]
+        for w in self._diarize_widgets:
+            w.grid_remove()
+
+    def _on_diarize_toggle(self):
+        if self._diarize_var.get():
+            for w in self._diarize_widgets:
+                w.grid()
+        else:
+            for w in self._diarize_widgets:
+                w.grid_remove()
 
     def _build_right_panel(self, parent):
         right = ctk.CTkFrame(parent)
@@ -244,6 +329,16 @@ class App:
             )
             return
 
+        diarize = bool(self._diarize_var.get())
+        hf_token = (
+            os.environ.get("HF_TOKEN") or self._hf_token_entry.get().strip() or None
+        )
+        if diarize and not hf_token:
+            self._status_label.configure(
+                text="❌ Error: Diarization requires a HuggingFace token (HF_TOKEN)."
+            )
+            return
+
         self._transcribe_btn.configure(state="disabled")
         self._progress_bar.set(0)
         self._progress_bar.grid()
@@ -260,11 +355,11 @@ class App:
 
         threading.Thread(
             target=self._run_transcription,
-            args=(input_source, backend, model_size, device, azure_key, azure_region, output_dir),
+            args=(input_source, backend, model_size, device, azure_key, azure_region, output_dir, diarize, hf_token),
             daemon=True,
         ).start()
 
-    def _run_transcription(self, input_source, backend, model_size, device, azure_key, azure_region, output_dir):
+    def _run_transcription(self, input_source, backend, model_size, device, azure_key, azure_region, output_dir, diarize=False, hf_token=None):
         try:
             full_text, _ = helper.transcribe_pipeline(
                 input_source=input_source,
@@ -275,6 +370,8 @@ class App:
                 azure_ai_location=azure_region,
                 output_dir=output_dir,
                 progress_callback=self._update_progress,
+                diarize=diarize,
+                hf_token=hf_token,
             )
             self.root.after(0, lambda: self._set_transcript(full_text))
             self.root.after(0, lambda: self._status_label.configure(text="✅ Complete"))
@@ -433,6 +530,7 @@ class App:
         self._chat_box = ctk.CTkTextbox(right, state="disabled", wrap="word")
         self._chat_box.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         self._bind_context_menu(self._chat_box, readonly=True)
+        self._configure_markdown_tags()
 
     def _start_ask(self):
         question = self._question_box.get("1.0", "end").strip()
@@ -470,8 +568,7 @@ class App:
                     model=model,
                 )
             answer = self._qa.ask(question)
-            entry = f"You: {question}\n\nAssistant: {answer}\n\n{'─' * 40}\n\n"
-            self.root.after(0, lambda e=entry: self._append_chat(e))
+            self.root.after(0, lambda q=question, a=answer: self._append_qa(q, a))
             self.root.after(0, lambda: self._qa_status_label.configure(text="Ready"))
         except Exception as e:
             msg = f"❌ Error: {e}"
@@ -482,6 +579,82 @@ class App:
     def _append_chat(self, text: str):
         self._chat_box.configure(state="normal")
         self._chat_box.insert("end", text)
+        self._chat_box.see("end")
+        self._chat_box.configure(state="disabled")
+
+    def _configure_markdown_tags(self):
+        """Define text tags used to style rendered markdown in the chat box.
+
+        No-op unless the underlying widget is a real tk.Text (e.g. under test where the
+        CTk widgets are mocked).
+        """
+        txt = getattr(self._chat_box, "_textbox", None)
+        if not isinstance(txt, tk.Text):
+            return
+        import tkinter.font as tkfont
+
+        try:
+            base = tkfont.Font(font=txt.cget("font"))
+            family = base.actual("family")
+            size = base.actual("size")
+            if not isinstance(size, int) or size <= 0:
+                size = 13
+        except Exception:
+            family, size = "Segoe UI", 13
+
+        txt.tag_configure("h1", font=(family, size + 7, "bold"), spacing1=10, spacing3=6)
+        txt.tag_configure("h2", font=(family, size + 4, "bold"), spacing1=8, spacing3=4)
+        txt.tag_configure("h3", font=(family, size + 2, "bold"), spacing1=6, spacing3=3)
+        txt.tag_configure("bold", font=(family, size, "bold"))
+        txt.tag_configure("italic", font=(family, size, "italic"))
+        txt.tag_configure("code", font=("Consolas", size), background="#e6e6e6")
+        txt.tag_configure("bullet", lmargin1=16, lmargin2=34, spacing3=2)
+        txt.tag_configure(
+            "speaker_you", font=(family, size + 1, "bold"), foreground="#1f6aa5"
+        )
+        txt.tag_configure(
+            "speaker_assistant", font=(family, size + 1, "bold"), foreground="#2e8b57"
+        )
+
+    def _insert_inline(self, text: str, base_tags: tuple = ()):
+        """Insert inline-markdown text, applying bold/italic/code styling tags."""
+        txt = self._chat_box._textbox
+        for run_text, style in tokenize_inline(text):
+            tags = base_tags + (style,) if style else base_tags
+            txt.insert("end", run_text, tags)
+
+    def _render_markdown(self, md_text: str):
+        """Render a block of markdown into the chat box using styled text tags."""
+        txt = self._chat_box._textbox
+        for raw in md_text.split("\n"):
+            line = raw.rstrip()
+            if not line:
+                txt.insert("end", "\n")
+                continue
+            kind, prefix, content = parse_markdown_block(line)
+            if kind in ("h1", "h2", "h3"):
+                self._insert_inline(content, (kind,))
+                txt.insert("end", "\n")
+            elif kind == "bullet":
+                start = txt.index("end-1c")
+                txt.insert("end", prefix)
+                self._insert_inline(content)
+                txt.insert("end", "\n")
+                txt.tag_add("bullet", start, "end-1c")
+            else:
+                self._insert_inline(content)
+                txt.insert("end", "\n")
+
+    def _append_qa(self, question: str, answer: str):
+        """Append a question/answer exchange, rendering the answer's markdown."""
+        self._chat_box.configure(state="normal")
+        txt = self._chat_box._textbox
+        txt.insert("end", "You:  ", ("speaker_you",))
+        self._insert_inline(question)
+        txt.insert("end", "\n\n")
+        txt.insert("end", "Assistant:\n", ("speaker_assistant",))
+        self._render_markdown(answer)
+        txt.insert("end", "\n" + "\u2500" * 40 + "\n\n")
         self._chat_box.see("end")
         self._chat_box.configure(state="disabled")
 

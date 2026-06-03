@@ -18,6 +18,12 @@ A flexible transcription tool that extracts audio from local video/audio files o
   - Splits long audio into 1-minute segments for efficient processing
   - Supports any audio format ffmpeg can decode
 
+- **Speaker Diarization (optional):**
+  - Separate and label speakers (`SPEAKER_00`, `SPEAKER_01`, …) via `pyannote.audio`
+  - Works with **both** the Whisper and Azure backends
+  - Produces a speaker-labeled, timestamped transcript plus a structured JSON sidecar
+    for generating downstream summaries
+
 - **Convenience Features:**
   - Auto-opens transcription file on completion (cross-platform)
   - Cleans up all temporary files automatically
@@ -76,6 +82,7 @@ The `.env` file is loaded automatically on startup (both CLI and GUI). See `.env
 | `AZURE_SPEECH_KEY` | Azure backend only | Azure Speech-to-Text API key |
 | `AZURE_AI_LOCATION` | Azure backend only | Azure region (e.g. `eastus`) |
 | `OPENAI_API_KEY` | Q&A with hosted LLMs only | API key for OpenAI or compatible endpoint |
+| `HF_TOKEN` | Diarization only (`--diarize`) | HuggingFace token for the gated pyannote model |
 
 You can also set these as shell environment variables if you prefer not to use a `.env` file.
 
@@ -96,7 +103,7 @@ $env:AZURE_AI_LOCATION="your_azure_ai_location"
 ### Basic Command Format
 
 ```bash
-uv run python main.py <input> [--backend azure|openai-whisper] [--model SIZE] [--device cpu|cuda] [--output DIR]
+uv run python main.py <input> [--backend azure|openai-whisper] [--model SIZE] [--device cpu|cuda] [--output DIR] [--diarize] [--hf-token TOKEN]
 ```
 
 **Arguments:**
@@ -105,6 +112,8 @@ uv run python main.py <input> [--backend azure|openai-whisper] [--model SIZE] [-
 - `--model` — Whisper model size (default: `base`); see [Model Sizes](#model-sizes) below
 - `--device` — Device for Whisper inference: `cuda` (default) or `cpu`
 - `--output` — Output directory for the transcription file (default: current working directory)
+- `--diarize` — Enable speaker diarization (see [Speaker Diarization](#speaker-diarization))
+- `--hf-token` — HuggingFace token for diarization (falls back to the `HF_TOKEN` env var)
 
 ### Examples
 
@@ -167,6 +176,74 @@ Specify a model with `--model`:
 ```bash
 uv run python main.py video.mp4 --model large
 ```
+
+## Speaker Diarization
+
+Diarization separates and labels individual speakers in the audio. It works with **both** the
+Whisper and Azure backends and is implemented with [`pyannote.audio`](https://github.com/pyannote/pyannote-audio).
+
+### How it works
+
+- **Whisper:** the full audio is transcribed once (preserving Whisper's context window), then each
+  transcript segment is assigned to a speaker by timestamp overlap with the diarization result.
+- **Azure:** the audio is split into speaker turns first, and each turn is transcribed individually
+  (Azure's REST recognizer does not expose word-level timestamps otherwise).
+
+### Setup
+
+1. Install the diarization extra (pulls `pyannote.audio` + PyTorch):
+   ```bash
+   uv sync --extra diarize
+   ```
+2. Create a free HuggingFace token at https://hf.co/settings/tokens
+3. Accept the model licenses (one-time) for:
+   - https://hf.co/pyannote/speaker-diarization-3.1
+   - https://hf.co/pyannote/segmentation-3.0
+4. Set the token via `HF_TOKEN` in your `.env` (or pass `--hf-token`).
+
+### Usage
+
+```bash
+# Whisper (local) with diarization
+uv run python main.py /path/to/meeting.mp4 --diarize
+
+# Azure backend with diarization
+uv run python main.py /path/to/meeting.mp4 --backend azure --diarize
+
+# Provide the token explicitly instead of via HF_TOKEN
+uv run python main.py /path/to/meeting.mp4 --diarize --hf-token hf_xxx
+```
+
+In the GUI, tick **Diarize (separate speakers)** and supply a token (or set `HF_TOKEN`).
+
+### Output format
+
+When diarization is enabled, the transcript is written as speaker-labeled, timestamped lines:
+
+```
+[00:00:00] SPEAKER_00: Thanks everyone for joining today's call.
+[00:00:06] SPEAKER_01: Happy to be here. Let's get started.
+```
+
+Alongside the `.txt` file, a structured JSON sidecar `<filename>_transcription.json` is written —
+ideal for generating further summaries programmatically:
+
+```json
+{
+  "source": "meeting.mp4",
+  "backend": "openai-whisper",
+  "diarized": true,
+  "speakers": ["SPEAKER_00", "SPEAKER_01"],
+  "segments": [
+    {"start": 0.0, "end": 5.4, "speaker": "SPEAKER_00", "text": "Thanks everyone for joining today's call."},
+    {"start": 6.1, "end": 9.8, "speaker": "SPEAKER_01", "text": "Happy to be here. Let's get started."}
+  ],
+  "text": "[00:00:00] SPEAKER_00: ..."
+}
+```
+
+The speaker-labeled transcript also feeds directly into the **Q&A** tab, so you can ask for
+summaries such as "summarize what SPEAKER_01 proposed."
 
 ## Desktop GUI (CustomTkinter)
 
